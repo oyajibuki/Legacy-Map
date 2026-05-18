@@ -1,0 +1,25 @@
+node_modules/
+.next/
+.env
+.env.local
+.env*.local
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.vscode/
+.idea/
+
+# Build
+out/
+dist/
+
+# Misc
+robocopy.log
+start-dev.bat
+start-dev.js

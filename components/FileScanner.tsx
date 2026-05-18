@@ -1,0 +1,123 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import { Upload, FolderOpen, Loader2 } from 'lucide-react';
+import { UploadedFile } from '@/lib/types';
+
+interface Props {
+  onFilesReady: (files: UploadedFile[]) => void;
+  isAnalyzing: boolean;
+}
+
+const MAX_FILE_SIZE = 500 * 1024; // 500KB per file
+const MAX_CONTENT_LENGTH = 100 * 1024; // 100KB content limit for analysis
+
+export default function FileScanner({ onFilesReady, isAnalyzing }: Props) {
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
+
+  async function processFiles(fileList: FileList) {
+    setLoadingMsg('ファイルを読み込み中...');
+    const files: UploadedFile[] = [];
+    const total = fileList.length;
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      if (file.size > MAX_FILE_SIZE) continue;
+
+      setLoadingMsg(`読み込み中 ${i + 1}/${total}: ${file.name}`);
+
+      try {
+        const content = await file.text();
+        const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+        files.push({
+          path: path.replace(/\\/g, '/'),
+          name: file.name,
+          content: content.slice(0, MAX_CONTENT_LENGTH),
+          size: file.size,
+        });
+      } catch {
+        // Skip unreadable files
+      }
+    }
+
+    setLoadingMsg('');
+    onFilesReady(files);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        className={`
+          relative flex flex-col items-center justify-center gap-3
+          border-2 border-dashed rounded-xl p-8 cursor-pointer transition-all duration-200
+          ${isDragging
+            ? 'border-indigo-500 bg-indigo-500/10'
+            : 'border-[#1e293b] hover:border-indigo-500/50 bg-[#111118]'}
+        `}
+        onClick={() => folderInputRef.current?.click()}
+      >
+        <input
+          ref={folderInputRef}
+          type="file"
+          className="hidden"
+          {...({ webkitdirectory: 'true', directory: 'true', multiple: true } as React.InputHTMLAttributes<HTMLInputElement>)}
+          onChange={(e) => e.target.files && processFiles(e.target.files)}
+        />
+
+        {isAnalyzing || loadingMsg ? (
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+            <p className="text-sm text-slate-400 text-center max-w-[200px]">
+              {loadingMsg || '解析中...'}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="w-14 h-14 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+              <FolderOpen className="w-7 h-7 text-indigo-400" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-300">
+                フォルダをドロップ
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                またはクリックして選択
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">対応コード</p>
+        <div className="flex flex-wrap gap-1.5">
+          {['TypeScript', 'JavaScript', 'Python', 'C/C++', 'Go', 'Ruby', 'Java', 'Rust'].map(lang => (
+            <span key={lang} className="text-xs px-2 py-0.5 rounded-full bg-[#1e1e2e] text-slate-400 border border-[#2d2d3e]">
+              {lang}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+        <p className="text-xs text-amber-400/80 leading-relaxed">
+          <span className="font-semibold text-amber-400">解析対象:</span>{' '}
+          ソースファイルのみ。node_modules・.git・dist は自動スキップ。500KB超ファイルは除外。
+        </p>
+      </div>
+    </div>
+  );
+}
