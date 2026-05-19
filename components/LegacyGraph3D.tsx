@@ -24,11 +24,28 @@ const LAYERS: Record<LayerKey, { radius: number; label: string; color: string; d
 
 const LAYER_RADII: Record<LayerKey, number> = { ui: 200, api: 135, service: 80, core: 35 };
 
-// Web/generic layer detection
-const UI_DIRS      = new Set(['components','component','pages','page','views','view','screens','screen','app','frontend','ui','layouts','layout','templates']);
-const API_DIRS     = new Set(['api','routes','route','controllers','controller','handlers','handler','endpoints','endpoint','middleware']);
-const SERVICE_DIRS = new Set(['services','service','hooks','hook','utils','util','lib','libs','helpers','helper','common','shared','actions']);
-const CORE_DIRS    = new Set(['models','model','db','database','types','type','interfaces','interface','core','store','stores','config','configs']);
+// Web/generic layer detection — covers TypeScript, Python, Go, Ruby, etc.
+const UI_DIRS = new Set([
+  'components','component','pages','page','views','view','screens','screen',
+  'app','frontend','ui','layouts','layout','templates','widgets','containers',
+  'presentation','display',
+]);
+const API_DIRS = new Set([
+  'api','routes','route','controllers','controller','handlers','handler',
+  'endpoints','endpoint','middleware','resolvers','resolver','graphql',
+  'discord_bot','discord','bot','bots','webhook','webhooks','telegram','slack',
+]);
+const SERVICE_DIRS = new Set([
+  'services','service','hooks','hook','utils','util','lib','libs',
+  'helpers','helper','common','shared','actions','cleancut','business',
+  'domain','usecases','usecase','interactors',
+]);
+const CORE_DIRS = new Set([
+  'models','model','db','database','types','type','interfaces','interface',
+  'core','store','stores','config','configs','supabase','prisma','migrations',
+  'migration','schema','entities','entity','data','repositories','repository',
+  'infra','infrastructure','persistence',
+]);
 
 // DOOM C prefix layer detection
 const C_UI_PREFIXES      = ['hu_','st_','am_','wi_','v_'];
@@ -37,17 +54,23 @@ const C_SERVICE_PREFIXES = ['r_','s_'];
 const C_CORE_PREFIXES    = ['w_','i_','d_'];
 
 function detectLayer(path: string, ext: string, name: string): LayerKey {
-  const parts  = path.split('/');
-  const topDir = parts[0].toLowerCase();
-
-  if (parts.length > 1) {
-    if (UI_DIRS.has(topDir))      return 'ui';
-    if (API_DIRS.has(topDir))     return 'api';
-    if (SERVICE_DIRS.has(topDir)) return 'service';
-    if (CORE_DIRS.has(topDir))    return 'core';
+  const e = ext.toLowerCase();
+  // ── 1. Directory-based detection ─────────────────────────────
+  // Check ALL dir components from innermost to outermost (skip the filename).
+  // This fixes the bug where `parts[0]` was always the project root folder
+  // (e.g. "42.OshiPay", "02.UndoQuest") which never matched any set.
+  const parts = path.replace(/\\/g, '/').split('/');
+  const dirs  = parts.slice(0, -1); // all but last (filename)
+  for (let i = dirs.length - 1; i >= 0; i--) {
+    const d = dirs[i].toLowerCase();
+    if (UI_DIRS.has(d))      return 'ui';
+    if (API_DIRS.has(d))     return 'api';
+    if (SERVICE_DIRS.has(d)) return 'service';
+    if (CORE_DIRS.has(d))    return 'core';
   }
 
-  if (['.c','.h','.cpp','.hpp'].includes(ext.toLowerCase())) {
+  // ── 2. C/C++ filename prefix detection (DOOM-style) ──────────
+  if (['.c','.h','.cpp','.hpp'].includes(e)) {
     const n = name.toLowerCase();
     if (C_UI_PREFIXES.some(p => n.startsWith(p)))      return 'ui';
     if (C_API_PREFIXES.some(p => n.startsWith(p)))     return 'api';
@@ -55,7 +78,54 @@ function detectLayer(path: string, ext: string, name: string): LayerKey {
     if (C_CORE_PREFIXES.some(p => n.startsWith(p)))    return 'core';
   }
 
-  return 'service';
+  // ── 3. Python filename hints ──────────────────────────────────
+  if (e === '.py') {
+    const base = name.toLowerCase().replace(/\.py$/, '');
+    // UI: main entry files (Streamlit / Flask / FastAPI apps)
+    if (['app','main','index','server','webapp'].includes(base) ||
+        base.endsWith('_app') || base.startsWith('app_')) return 'ui';
+    // Core: data / DB files
+    if (['database','db','models','schema','migration','entities'].includes(base) ||
+        base.startsWith('db_') || base.endsWith('_db') ||
+        base.startsWith('model') || base.includes('schema')) return 'core';
+    // API: bot / webhook / route files
+    if (['routes','router','api','handler','bot','webhook','endpoints'].includes(base) ||
+        base.endsWith('_handler') || base.endsWith('_router') ||
+        base.includes('bot') || base.includes('webhook')) return 'api';
+  }
+
+  // ── 4. Swift filename hints ───────────────────────────────────
+  if (e === '.swift') {
+    const base = name.toLowerCase().replace(/\.swift$/, '');
+    // UI: View types and app entry points
+    if (base.endsWith('view') || base.endsWith('viewcontroller') || base.endsWith('vc') ||
+        base.endsWith('app') || base === 'appdelegate' || base === 'scenedelegate' ||
+        base.includes('screen') || base.endsWith('page')) return 'ui';
+    // Service: ViewModel / Manager / Service
+    if (base.endsWith('viewmodel') || base.endsWith('vm') || base.endsWith('presenter') ||
+        base.endsWith('service') || base.endsWith('manager') || base.endsWith('helper') ||
+        base.endsWith('interactor') || base.endsWith('usecase')) return 'service';
+    // Core: Model / Store / Repository / Data
+    if (base.endsWith('model') || base.endsWith('entity') || base.endsWith('store') ||
+        base.endsWith('repository') || base.endsWith('repo') ||
+        base.includes('data') || base.includes('persist') || base.includes('cache')) return 'core';
+    // API: Network / API / Request / Response
+    if (base.endsWith('api') || base.endsWith('client') || base.endsWith('request') ||
+        base.endsWith('response') || base.includes('network') || base.includes('remote')) return 'api';
+  }
+
+  // ── 5. Kotlin/Java filename hints ─────────────────────────────
+  if (['.kt','.java'].includes(e)) {
+    const base = name.toLowerCase().replace(/\.(kt|java)$/, '');
+    if (base.endsWith('activity') || base.endsWith('fragment') || base.endsWith('view') ||
+        base.endsWith('adapter') || base.endsWith('composable')) return 'ui';
+    if (base.endsWith('viewmodel') || base.endsWith('presenter') || base.endsWith('service')) return 'service';
+    if (base.endsWith('repository') || base.endsWith('dao') || base.endsWith('entity') ||
+        base.endsWith('model') || base.includes('database')) return 'core';
+    if (base.endsWith('api') || base.endsWith('client') || base.endsWith('retrofit')) return 'api';
+  }
+
+  return 'service'; // sensible default
 }
 
 function riskColor(level: string): string {
@@ -235,14 +305,22 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     return group;
   }, [selectedNode, colorMode]);
 
-  // Link color — cross-layer = bright, same-layer = subtle
+  // Same-layer link colors — use each layer's own color at readable opacity
+  const LAYER_LINK_COLORS: Record<LayerKey, string> = {
+    ui:      'rgba(129,140,248,0.55)',  // indigo
+    api:     'rgba(52,211,153,0.55)',   // green
+    service: 'rgba(245,158,11,0.55)',   // amber
+    core:    'rgba(244,114,182,0.65)',  // pink (brighter — core links matter)
+  };
+
+  // Link color — cross-layer = white-blue, same-layer = layer's own color
   const linkColor = useCallback((link: object) => {
     const l = link as GLink & { source: GNode; target: GNode };
     const src = typeof l.source === 'object' ? l.source : null;
     const tgt = typeof l.target === 'object' ? l.target : null;
-    if (!src || !tgt) return 'rgba(148,163,184,0.4)';
-    if (src.layer !== tgt.layer) return 'rgba(200,220,255,0.65)'; // cross-layer: bright blue-white
-    return 'rgba(148,163,184,0.35)';                              // same-layer: subtle grey
+    if (!src || !tgt) return 'rgba(148,163,184,0.45)';
+    if (src.layer !== tgt.layer) return 'rgba(210,225,255,0.70)'; // cross-layer: bright blue-white
+    return LAYER_LINK_COLORS[src.layer];                          // same-layer: own color
   }, []);
 
   // Link width — based on average degree of connected nodes

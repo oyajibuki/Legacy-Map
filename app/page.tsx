@@ -71,6 +71,7 @@ export default function Home() {
             {/* Stats bar */}
             <div className="hidden md:flex items-center gap-4 text-xs">
               <StatChip icon={<Files className="w-3 h-3" />} value={graph.stats.totalFiles} label="ファイル" color="text-slate-400" />
+              <StatChip icon={<GitBranch className="w-3 h-3" />} value={graph.edges.length} label="接続" color={graph.edges.length > 0 ? 'text-indigo-400' : 'text-slate-600'} />
               <StatChip icon={<AlertTriangle className="w-3 h-3" />} value={graph.stats.criticalFiles + graph.stats.riskFiles} label="要対応" color="text-red-400" />
               <StatChip icon={<TrendingUp className="w-3 h-3" />} value={`${graph.stats.avgRiskScore}`} label="平均リスク" color={graph.stats.avgRiskScore > 50 ? 'text-red-400' : graph.stats.avgRiskScore > 25 ? 'text-amber-400' : 'text-slate-400'} />
               <StatChip icon={<Shield className="w-3 h-3" />} value={graph.stats.safeFiles} label="安全" color="text-green-500" />

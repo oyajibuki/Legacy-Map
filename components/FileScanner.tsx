@@ -47,7 +47,6 @@ export default function FileScanner({ onFilesReady, isAnalyzing }: Props) {
   async function processFiles(fileList: FileList) {
     setLoadingMsg('ファイルを読み込み中...');
     const files: UploadedFile[] = [];
-    const total = fileList.length;
 
     let readCount = 0;
     for (let i = 0; i < fileList.length; i++) {
@@ -59,7 +58,7 @@ export default function FileScanner({ onFilesReady, isAnalyzing }: Props) {
       if (file.size > MAX_FILE_SIZE) continue;
 
       readCount++;
-      setLoadingMsg(`読み込み中 ${readCount}: ${file.name}`);
+      if (readCount % 5 === 0) setLoadingMsg(`読み込み中 ${readCount} ファイル目...`);
 
       try {
         const content = await file.text();
@@ -78,12 +77,94 @@ export default function FileScanner({ onFilesReady, isAnalyzing }: Props) {
     onFilesReady(files);
   }
 
-  function handleDrop(e: React.DragEvent) {
+  // Drag-and-drop using DataTransfer Items API to preserve directory structure.
+  // e.dataTransfer.files loses webkitRelativePath for dropped folders in most browsers.
+  async function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files.length > 0) {
-      processFiles(e.dataTransfer.files);
+
+    const items = e.dataTransfer.items;
+    if (!items || items.length === 0) return;
+
+    // Try to read as directory entries to get full paths
+    const entries: FileSystemFileEntry[] = [];
+    const promises: Promise<void>[] = [];
+
+    function readEntry(entry: FileSystemEntry, pathPrefix: string) {
+      if (entry.isFile) {
+        const fileEntry = entry as FileSystemFileEntry;
+        promises.push(new Promise<void>(resolve => {
+          fileEntry.file(f => {
+            // Attach the full relative path manually
+            Object.defineProperty(f, 'webkitRelativePath', {
+              value: pathPrefix + f.name,
+              writable: false,
+            });
+            entries.push(fileEntry);
+            // Store path on the entry object for later
+            (fileEntry as any).__path = pathPrefix + f.name;
+            resolve();
+          }, () => resolve());
+        }));
+      } else if (entry.isDirectory) {
+        const dirEntry = entry as FileSystemDirectoryEntry;
+        const reader = dirEntry.createReader();
+        promises.push(new Promise<void>(resolve => {
+          reader.readEntries(subEntries => {
+            for (const sub of subEntries) {
+              readEntry(sub, pathPrefix + dirEntry.name + '/');
+            }
+            resolve();
+          }, () => resolve());
+        }));
+      }
     }
+
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry?.();
+      if (entry) readEntry(entry, '');
+    }
+
+    // Wait for all readEntries to complete
+    await Promise.all(promises);
+
+    // Read all collected file entries
+    setLoadingMsg('ファイルを読み込み中...');
+    const files: UploadedFile[] = [];
+    let readCount = 0;
+
+    for (const entry of entries) {
+      const relPath = (entry as any).__path as string || entry.name;
+      if (shouldSkip(relPath, entry.name)) continue;
+
+      await new Promise<void>(resolve => {
+        entry.file(async (f) => {
+          if (f.size > MAX_FILE_SIZE) { resolve(); return; }
+          readCount++;
+          if (readCount % 5 === 0) setLoadingMsg(`読み込み中 ${readCount} ファイル目...`);
+          try {
+            const content = await f.text();
+            files.push({
+              path: relPath.replace(/\\/g, '/'),
+              name: f.name,
+              content: content.slice(0, MAX_CONTENT_LENGTH),
+              size: f.size,
+            });
+          } catch { /* skip */ }
+          resolve();
+        }, () => resolve());
+      });
+    }
+
+    // Fallback: if no entries were found via Items API, use files directly
+    if (files.length === 0 && e.dataTransfer.files.length > 0) {
+      setLoadingMsg('');
+      processFiles(e.dataTransfer.files);
+      return;
+    }
+
+    setLoadingMsg('');
+    onFilesReady(files);
   }
 
   return (
