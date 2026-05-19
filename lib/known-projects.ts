@@ -207,12 +207,21 @@ export const KNOWN_PROJECTS: ProjectInsight[] = [
   },
 ];
 
-// Detect project from node paths
+// Detect project from node paths.
+// Uses best-score strategy: pick the project with the MOST pattern matches
+// (not just the first one with ≥2). This prevents DOOM from winning over
+// ChocolateDoom/ZDoom, which contain all of DOOM's source files but also
+// have their own unique patterns that score higher.
 export function detectKnownProject(nodePaths: string[]): ProjectInsight | null {
   const pathsLower = nodePaths.map(p => p.toLowerCase()).join('\n');
+  let best: ProjectInsight | null = null;
+  let bestScore = 1; // must beat 1 (i.e. need at least 2 matches to qualify)
   for (const proj of KNOWN_PROJECTS) {
-    const matches = proj.detectPatterns.filter(pat => pathsLower.includes(pat.toLowerCase()));
-    if (matches.length >= 2) return proj;
+    const score = proj.detectPatterns.filter(pat => pathsLower.includes(pat.toLowerCase())).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = proj;
+    }
   }
-  return null;
+  return best;
 }
