@@ -160,6 +160,21 @@ type GNode = {
 
 type GLink = { source: string | GNode; target: string | GNode; weight: number };
 
+// ── Fibonacci sphere — evenly distributes N points on a sphere of given radius ──
+// Gives deterministic, even initial positions so the graph settles consistently.
+function fibSpherePos(i: number, total: number, radius: number) {
+  if (total <= 1) return { x: radius, y: 0, z: 0 };
+  const golden = Math.PI * (3 - Math.sqrt(5)); // ~137.5° golden angle
+  const y = 1 - (i / (total - 1)) * 2;         // -1 to +1
+  const r = Math.sqrt(Math.max(0, 1 - y * y));
+  const theta = golden * i;
+  return {
+    x: radius * r * Math.cos(theta),
+    y: radius * y,
+    z: radius * r * Math.sin(theta),
+  };
+}
+
 // ── Component ──────────────────────────────────────────────
 export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Props) {
   const fgRef = useRef<any>(null);
@@ -175,9 +190,18 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
       degreeMap.set(e.source, (degreeMap.get(e.source) ?? 0) + 1);
       degreeMap.set(e.target, (degreeMap.get(e.target) ?? 0) + 1);
     }
+
+    // Assign each node a layer first (two-pass for Fibonacci distribution)
+    const layerAssign = graph.nodes.map(n => detectLayer(n.path, n.extension, n.name));
+    const layerTotals: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, core: 0 };
+    const layerCounters: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, core: 0 };
+    for (const l of layerAssign) layerTotals[l]++;
+
     return {
-      nodes: graph.nodes.map((n): GNode => {
-        const layer = detectLayer(n.path, n.extension, n.name);
+      nodes: graph.nodes.map((n, idx): GNode => {
+        const layer = layerAssign[idx];
+        // Pre-position on Fibonacci sphere at target radius → stable layout from frame 1
+        const pos = fibSpherePos(layerCounters[layer]++, layerTotals[layer], LAYER_RADII[layer]);
         return {
           id: n.id,
           name: n.name,
@@ -189,6 +213,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
           val: Math.max(1, Math.min(8, n.lines / 100)),
           degree: degreeMap.get(n.id) ?? 0,
           color: LAYERS[layer].color,
+          x: pos.x, y: pos.y, z: pos.z,
         };
       }),
       links: graph.edges.map((e): GLink => ({
@@ -208,14 +233,14 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         fgRef.current.d3Force(
           'radial',
           forceRadial((node: GNode) => LAYER_RADII[node.layer])
-            .strength(2.5)
+            .strength(3.5)  // Strong pull to shell — stable even after cache clear
         );
         // Reduce link force to let radial dominate
         const linkForce = fgRef.current.d3Force('link');
-        if (linkForce) linkForce.distance(30).strength(0.2);
+        if (linkForce) linkForce.distance(25).strength(0.15);
         // Reduce charge to allow spreading around each shell
         const chargeForce = fgRef.current.d3Force('charge');
-        if (chargeForce) chargeForce.strength(-80);
+        if (chargeForce) chargeForce.strength(-60);
         // Reheat
         fgRef.current.d3ReheatSimulation();
       } catch (e) {
@@ -459,7 +484,6 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
           // Normal links: use layer color
           return LAYERS[src.layer].color;
         }}
-        linkOpacity={1}
       backgroundColor="#02020a"
         onNodeClick={(node) => {
           const n = node as GNode;
@@ -479,8 +503,10 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         onBackgroundClick={() => { onSelectNode(null); setTooltip(null); }}
         showNavInfo={false}
         enableNodeDrag={false}
-        d3AlphaDecay={0.015}
-        d3VelocityDecay={0.25}
+        warmupTicks={120}
+        cooldownTicks={200}
+        d3AlphaDecay={0.02}
+        d3VelocityDecay={0.3}
         cameraPosition={{ x: 0, y: 0, z: 380 }}
       />
     </div>

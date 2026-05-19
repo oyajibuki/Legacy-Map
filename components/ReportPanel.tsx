@@ -44,13 +44,13 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
   const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('gemini-api-key');
+    const saved = localStorage.getItem('vibemap_gemini_api_key');
     if (saved) setApiKey(saved);
   }, []);
 
   function saveApiKey(key: string) {
     setApiKey(key);
-    localStorage.setItem('gemini-api-key', key);
+    localStorage.setItem('vibemap_gemini_api_key', key);
     setShowApiInput(false);
   }
 

@@ -70,15 +70,26 @@ function extractJsImports(content: string): { packages: string[]; relativeImport
 }
 
 // Extract Python imports
-function extractPyImports(content: string): { packages: string[]; relativeImports: string[] } {
+function extractPyImports(content: string): { packages: string[]; relativeImports: string[]; dottedImports: string[] } {
   const packages: string[] = [];
   const relativeImports: string[] = [];
+  const dottedImports: string[] = [];
   const STDLIB = new Set(['os', 'sys', 'io', 're', 'json', 'time', 'math', 'random', 'collections',
     'itertools', 'functools', 'pathlib', 'shutil', 'subprocess', 'threading', 'logging',
     'unittest', 'argparse', 'copy', 'datetime', 'hashlib', 'struct', 'socket', 'typing',
-    'enum', 'abc', 'contextlib', 'dataclasses', 'string', 'textwrap', 'csv', 'configparser']);
+    'enum', 'abc', 'contextlib', 'dataclasses', 'string', 'textwrap', 'csv', 'configparser',
+    'builtins', 'warnings', 'traceback', 'inspect', 'types', 'operator', 'weakref',
+    'gc', 'platform', 'signal', 'queue', 'asyncio', 'concurrent', 'multiprocessing',
+    'urllib', 'http', 'email', 'html', 'xml', 'base64', 'hmac', 'secrets',
+  ]);
 
+  // Top-level: import foo or from foo import bar — capture first segment
   const pkgPattern = /^(?:import|from)\s+([a-zA-Z0-9_]+)/gm;
+  // Dotted: from foo.bar.baz import → capture full dotted path
+  const dottedPattern = /^from\s+([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)\s+import/gm;
+  // Dotted import: import foo.bar.baz
+  const importDotted = /^import\s+([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)/gm;
+  // Relative: from . import or from .module import
   const relPattern = /^from\s+(\.+[a-zA-Z0-9_.]*)\s+import/gm;
 
   let match;
@@ -86,11 +97,21 @@ function extractPyImports(content: string): { packages: string[]; relativeImport
     const pkg = match[1];
     if (!STDLIB.has(pkg)) packages.push(pkg);
   }
+  while ((match = dottedPattern.exec(content)) !== null) {
+    const dotted = match[1];
+    const root = dotted.split('.')[0];
+    if (!STDLIB.has(root)) dottedImports.push(dotted);
+  }
+  while ((match = importDotted.exec(content)) !== null) {
+    const dotted = match[1];
+    const root = dotted.split('.')[0];
+    if (!STDLIB.has(root)) dottedImports.push(dotted);
+  }
   while ((match = relPattern.exec(content)) !== null) {
     relativeImports.push(match[1]);
   }
 
-  return { packages: [...new Set(packages)], relativeImports: [...new Set(relativeImports)] };
+  return { packages: [...new Set(packages)], relativeImports: [...new Set(relativeImports)], dottedImports: [...new Set(dottedImports)] };
 }
 
 // Extract C/C++ includes
@@ -137,12 +158,47 @@ function extractSwiftTypeDefs(content: string): string[] {
   return [...new Set(defs)];
 }
 
-function extractImports(content: string, ext: string): { packages: string[]; relativeImports: string[] } {
+// Extract Go imports
+function extractGoImports(content: string): { packages: string[]; relativeImports: string[] } {
+  const packages: string[] = [];
+  // Single: import "pkg/path"
+  // Block: import ( "pkg" \n "pkg2" )
+  const single = /import\s+"([^"]+)"/g;
+  const block = /import\s*\(([^)]+)\)/g;
+  let m;
+  while ((m = single.exec(content)) !== null) packages.push(m[1].split('/').pop() || m[1]);
+  while ((m = block.exec(content)) !== null) {
+    const inner = m[1];
+    const line = /"([^"]+)"/g;
+    let l;
+    while ((l = line.exec(inner)) !== null) packages.push(l[1].split('/').pop() || l[1]);
+  }
+  return { packages: [...new Set(packages)], relativeImports: [] };
+}
+
+// Extract Ruby requires
+function extractRubyImports(content: string): { packages: string[]; relativeImports: string[] } {
+  const packages: string[] = [];
+  const relativeImports: string[] = [];
+  const reqRel = /require_relative\s+['"]([^'"]+)['"]/g;
+  const req    = /^\s*require\s+['"]([^'"]+)['"]/gm;
+  let m;
+  while ((m = reqRel.exec(content)) !== null) relativeImports.push('./' + m[1]);
+  while ((m = req.exec(content)) !== null) {
+    const p = m[1];
+    if (!p.startsWith('.')) packages.push(p.split('/')[0]);
+  }
+  return { packages: [...new Set(packages)], relativeImports: [...new Set(relativeImports)] };
+}
+
+function extractImports(content: string, ext: string): { packages: string[]; relativeImports: string[]; dottedImports?: string[] } {
   const e = ext.toLowerCase();
   if (['.ts', '.tsx', '.js', '.jsx', '.mjs'].includes(e)) return extractJsImports(content);
   if (e === '.py') return extractPyImports(content);
   if (['.c', '.cpp', '.cc', '.cxx', '.h', '.hpp'].includes(e)) return extractCIncludes(content);
   if (e === '.swift') return extractSwiftImports(content);
+  if (e === '.go') return extractGoImports(content);
+  if (e === '.rb') return extractRubyImports(content);
   return { packages: [], relativeImports: [] };
 }
 
@@ -338,7 +394,7 @@ export function analyzeFiles(uploadedFiles: UploadedFile[]): DependencyGraph {
   const partialNodes: Omit<FileNode, 'riskScore' | 'riskLevel' | 'riskFactors'>[] = validFiles.map(file => {
     const ext = file.name.includes('.') ? '.' + file.name.split('.').pop()! : '';
     const lines = file.content.split('\n').length;
-    const { packages, relativeImports } = extractImports(file.content, ext);
+    const { packages, relativeImports } = extractImports(file.content, ext) as { packages: string[]; relativeImports: string[] };
     const eolPackages = detectEolPackages(packages);
     const isTest = /\.(test|spec)\.(ts|tsx|js|jsx|py)$/.test(file.name) ||
                    /^test_/.test(file.name) ||
@@ -367,10 +423,24 @@ export function analyzeFiles(uploadedFiles: UploadedFile[]): DependencyGraph {
 
   // Map Python file stems to their paths for internal module resolution
   const pyFileStemMap = new Map<string, string>();
+  // Also map dotted paths like "app.models" → "app/models.py"
+  const pyDottedMap = new Map<string, string>();
   for (const p of allPaths) {
     if (p.endsWith('.py')) {
       const stem = p.split(/[/\\]/).pop()!.replace(/\.py$/, '');
       pyFileStemMap.set(stem, p);
+      // Build dotted key from path: "42.OshiPay/app/models.py" → "app.models"
+      const parts = p.replace(/\\/g, '/').split('/');
+      const pyParts = parts.slice(1); // skip project root
+      if (pyParts.length >= 2) {
+        const dotted = pyParts.join('.').replace(/\.py$/, '');
+        pyDottedMap.set(dotted, p);
+        // Also shorter variants: last 2 segments, last 3 segments
+        if (pyParts.length >= 3) {
+          const short = pyParts.slice(-2).join('.').replace(/\.py$/, '');
+          if (!pyDottedMap.has(short)) pyDottedMap.set(short, p);
+        }
+      }
     }
   }
 
@@ -404,12 +474,31 @@ export function analyzeFiles(uploadedFiles: UploadedFile[]): DependencyGraph {
     // Python: also resolve absolute-style imports against local file stems
     // e.g. `from utils import x` → links to utils.py if it exists in the project
     if (node.extension === '.py') {
+      const { dottedImports = [] } = extractImports(
+        validFiles.find(f => f.path === node.id)?.content || '', '.py'
+      ) as { packages: string[]; relativeImports: string[]; dottedImports?: string[] };
+
       for (const pkg of node.imports) {
         const target = pyFileStemMap.get(pkg);
         if (target && target !== node.id) {
           resolved.push(target);
           const key = `${node.id}|||${target}`;
           edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
+        }
+      }
+      // Resolve dotted imports: `from app.models import User` → app/models.py
+      for (const dotted of dottedImports) {
+        // Try full dotted path first, then progressively shorter suffixes
+        const segs = dotted.split('.');
+        for (let start = 0; start < segs.length; start++) {
+          const key = segs.slice(start).join('.');
+          const target = pyDottedMap.get(key) || pyFileStemMap.get(segs[segs.length - 1]);
+          if (target && target !== node.id) {
+            resolved.push(target);
+            const ekey = `${node.id}|||${target}`;
+            edgeMap.set(ekey, (edgeMap.get(ekey) || 0) + 1);
+            break; // found — no need to try shorter
+          }
         }
       }
     }
