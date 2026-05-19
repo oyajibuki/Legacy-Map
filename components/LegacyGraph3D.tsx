@@ -13,22 +13,24 @@ interface Props {
 }
 
 // ── Layer definitions (outer → inner) ──────────────────────
-type LayerKey = 'ui' | 'api' | 'service' | 'core';
+type LayerKey = 'ui' | 'api' | 'service' | 'platform' | 'core';
 
 const LAYERS: Record<LayerKey, { radius: number; label: string; color: string; desc: string }> = {
-  ui:      { radius: 200, label: 'UI層',        color: '#818cf8', desc: 'フロントエンド・画面' },
-  api:     { radius: 135, label: 'API/ルート層', color: '#34d399', desc: 'エンドポイント・ルーティング' },
-  service: { radius: 80,  label: 'サービス層',   color: '#f59e0b', desc: 'ビジネスロジック・ライブラリ' },
-  core:    { radius: 35,  label: 'コア層',       color: '#f472b6', desc: 'データモデル・システム基盤' },
+  ui:       { radius: 240, label: 'UI層',              color: '#818cf8', desc: 'フロントエンド・画面・表示' },
+  api:      { radius: 185, label: 'API/エントリ層',     color: '#34d399', desc: 'エンドポイント・エントリーポイント' },
+  service:  { radius: 130, label: 'サービス層',         color: '#f59e0b', desc: 'ビジネスロジック・ゲームロジック' },
+  platform: { radius: 80,  label: 'プラットフォーム層', color: '#22d3ee', desc: 'OS抽象化・システム依存コード' },
+  core:     { radius: 35,  label: 'コア層',             color: '#f472b6', desc: 'データモデル・ヘッダ・基盤' },
 };
 
-const LAYER_RADII: Record<LayerKey, number> = { ui: 200, api: 135, service: 80, core: 35 };
+const LAYER_RADII: Record<LayerKey, number> = { ui: 240, api: 185, service: 130, platform: 80, core: 35 };
 
 // Web/generic layer detection — covers TypeScript, Python, Go, Ruby, etc.
 const UI_DIRS = new Set([
   'components','component','pages','page','views','view','screens','screen',
   'app','frontend','ui','layouts','layout','templates','widgets','containers',
   'presentation','display',
+  'win','window','windows','windowing','tty','curses','x11','sdl', // C windowing systems
 ]);
 const API_DIRS = new Set([
   'api','routes','route','controllers','controller','handlers','handler',
@@ -39,12 +41,19 @@ const SERVICE_DIRS = new Set([
   'services','service','hooks','hook','utils','util','lib','libs',
   'helpers','helper','common','shared','actions','cleancut','business',
   'domain','usecases','usecase','interactors',
+  'src','source','game','logic', // generic C source dirs
+]);
+const PLATFORM_DIRS = new Set([
+  'sys','system','platform','platforms','porting','port','ports',
+  'os','native','arch','target','hal','bsp','driver','drivers',
+  'backend','backends','runtime','runtimes','posix','unix','linux','macos',
 ]);
 const CORE_DIRS = new Set([
   'models','model','db','database','types','type','interfaces','interface',
   'core','store','stores','config','configs','supabase','prisma','migrations',
   'migration','schema','entities','entity','data','repositories','repository',
   'infra','infrastructure','persistence',
+  'include','includes','headers','header', // C header directories
 ]);
 
 // DOOM C prefix layer detection
@@ -63,10 +72,11 @@ function detectLayer(path: string, ext: string, name: string): LayerKey {
   const dirs  = parts.slice(0, -1); // all but last (filename)
   for (let i = dirs.length - 1; i >= 0; i--) {
     const d = dirs[i].toLowerCase();
-    if (UI_DIRS.has(d))      return 'ui';
-    if (API_DIRS.has(d))     return 'api';
-    if (SERVICE_DIRS.has(d)) return 'service';
-    if (CORE_DIRS.has(d))    return 'core';
+    if (UI_DIRS.has(d))       return 'ui';
+    if (API_DIRS.has(d))      return 'api';
+    if (SERVICE_DIRS.has(d))  return 'service';
+    if (PLATFORM_DIRS.has(d)) return 'platform';
+    if (CORE_DIRS.has(d))     return 'core';
   }
 
   // ── 2. C/C++ filename prefix detection (DOOM-style) ──────────
@@ -76,6 +86,11 @@ function detectLayer(path: string, ext: string, name: string): LayerKey {
     if (C_API_PREFIXES.some(p => n.startsWith(p)))     return 'api';
     if (C_SERVICE_PREFIXES.some(p => n.startsWith(p))) return 'service';
     if (C_CORE_PREFIXES.some(p => n.startsWith(p)))    return 'core';
+    // Entry point files → api
+    const basename = n.replace(/\.[^.]+$/, '');
+    if (['main','nhmain','quake','q_main','startup'].includes(basename)) return 'api';
+    // Header files default to core (interface/data definitions)
+    if (['.h','.hpp'].includes(e)) return 'core';
   }
 
   // ── 3. Python filename hints ──────────────────────────────────
@@ -222,8 +237,8 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
 
     // Assign each node a layer first (two-pass for Fibonacci distribution)
     const layerAssign = graph.nodes.map(n => detectLayer(n.path, n.extension, n.name));
-    const layerTotals: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, core: 0 };
-    const layerCounters: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, core: 0 };
+    const layerTotals: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, platform: 0, core: 0 };
+    const layerCounters: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, platform: 0, core: 0 };
     for (const l of layerAssign) layerTotals[l]++;
 
     return {
@@ -275,7 +290,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
           });
 
           // Pre-position nodes: cluster center + small layer-based offset within cluster
-          const INNER_R: Record<LayerKey, number> = { ui: 42, api: 28, service: 16, core: 7 };
+          const INNER_R: Record<LayerKey, number> = { ui: 55, api: 42, service: 28, platform: 16, core: 7 };
           const clk = new Map<string, number>(); // cluster_layer → counter
           const clt = new Map<string, number>(); // cluster_layer → total
           for (const n of graphData.nodes) {
@@ -311,8 +326,8 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         } else {
           // ── LAYER MODE: concentric sphere shells ──────────────────
           // Re-seed positions on Fibonacci sphere by layer
-          const lt: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, core: 0 };
-          const lc: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, core: 0 };
+          const lt: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, platform: 0, core: 0 };
+          const lc: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, platform: 0, core: 0 };
           for (const n of graphData.nodes) lt[n.layer]++;
           for (const n of graphData.nodes as any[]) {
             const pos = fibSpherePos(lc[n.layer as LayerKey]++, lt[n.layer as LayerKey], LAYER_RADII[n.layer as LayerKey]);
@@ -419,10 +434,11 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
 
   // Same-layer link colors — use each layer's own color at readable opacity
   const LAYER_LINK_COLORS: Record<LayerKey, string> = {
-    ui:      'rgba(129,140,248,0.55)',  // indigo
-    api:     'rgba(52,211,153,0.55)',   // green
-    service: 'rgba(245,158,11,0.55)',   // amber
-    core:    'rgba(244,114,182,0.65)',  // pink (brighter — core links matter)
+    ui:       'rgba(129,140,248,0.55)',  // indigo
+    api:      'rgba(52,211,153,0.55)',   // green
+    service:  'rgba(245,158,11,0.55)',   // amber
+    platform: 'rgba(34,211,238,0.55)',   // cyan
+    core:     'rgba(244,114,182,0.65)',  // pink (brighter — core links matter)
   };
 
   // Link color — cross-layer = white-blue, same-layer = layer's own color
