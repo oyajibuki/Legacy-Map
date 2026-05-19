@@ -33,6 +33,11 @@ function detectLanguage(ext: string): string {
     '.sh': 'Shell', '.bash': 'Shell',
     '.bat': 'Batch', '.cmd': 'Batch',
     '.coffee': 'CoffeeScript',
+    '.cob': 'COBOL', '.cbl': 'COBOL', '.cobol': 'COBOL', '.cpy': 'COBOL Copybook',
+    '.f': 'Fortran', '.f90': 'Fortran', '.f95': 'Fortran', '.for': 'Fortran',
+    '.pas': 'Pascal', '.pp': 'Pascal',
+    '.pl': 'Perl', '.pm': 'Perl',
+    '.asm': 'Assembly', '.s': 'Assembly',
     '.html': 'HTML', '.htm': 'HTML',
     '.css': 'CSS', '.scss': 'SCSS', '.sass': 'SCSS', '.less': 'Less',
     '.json': 'JSON', '.yaml': 'YAML', '.yml': 'YAML', '.toml': 'TOML',
@@ -176,6 +181,29 @@ function extractGoImports(content: string): { packages: string[]; relativeImport
   return { packages: [...new Set(packages)], relativeImports: [] };
 }
 
+// Extract COBOL dependencies (COPY books + CALL statements)
+function extractCobolDeps(content: string): { packages: string[]; relativeImports: string[] } {
+  const relativeImports: string[] = [];
+  // COPY FILENAME. or COPY "filename"  — links to .cpy copybooks
+  const copyPat = /\bCOPY\s+["']?([A-Z0-9][A-Z0-9-]*)["']?\s*[.\n]/gi;
+  // CALL 'PROGRAM' or CALL "PROGRAM" — links to other COBOL programs
+  const callPat = /\bCALL\s+["']([A-Z0-9][A-Z0-9-]*)["']/gi;
+  let m;
+  while ((m = copyPat.exec(content)) !== null) relativeImports.push('./' + m[1]);
+  while ((m = callPat.exec(content)) !== null) relativeImports.push('./' + m[1]);
+  return { packages: [], relativeImports: [...new Set(relativeImports)] };
+}
+
+// Extract Assembly includes
+function extractAsmDeps(content: string): { packages: string[]; relativeImports: string[] } {
+  const relativeImports: string[] = [];
+  // %include "file.asm" / INCLUDE file.asm / .include "file.s"
+  const pat = /(?:%include|\.include|INCLUDE)\s+["']?([^\s"';\n]+)["']?/gi;
+  let m;
+  while ((m = pat.exec(content)) !== null) relativeImports.push('./' + m[1]);
+  return { packages: [], relativeImports: [...new Set(relativeImports)] };
+}
+
 // Extract Ruby requires
 function extractRubyImports(content: string): { packages: string[]; relativeImports: string[] } {
   const packages: string[] = [];
@@ -199,6 +227,8 @@ function extractImports(content: string, ext: string): { packages: string[]; rel
   if (e === '.swift') return extractSwiftImports(content);
   if (e === '.go') return extractGoImports(content);
   if (e === '.rb') return extractRubyImports(content);
+  if (['.cob', '.cbl', '.cobol', '.cpy'].includes(e)) return extractCobolDeps(content);
+  if (['.asm', '.s'].includes(e)) return extractAsmDeps(content);
   return { packages: [], relativeImports: [] };
 }
 
