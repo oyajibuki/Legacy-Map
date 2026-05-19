@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const maxDuration = 60;
 
@@ -22,9 +22,9 @@ interface AnalyzePayload {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = req.headers.get('x-anthropic-api-key');
+  const apiKey = req.headers.get('x-gemini-api-key');
   if (!apiKey) {
-    return NextResponse.json({ error: 'Anthropic API key required' }, { status: 401 });
+    return NextResponse.json({ error: 'Gemini API key required' }, { status: 401 });
   }
 
   let body: AnalyzePayload;
@@ -126,25 +126,21 @@ ${fileSnippets ? `## コードサンプル\n${fileSnippets}` : ''}
 （人月、難易度、優先順位の表）`;
 
   const prompt = mode === 'migration' ? migrationPrompt : operationPrompt;
+  const fullPrompt = `${systemPrompt}\n\n${prompt}`;
 
   try {
-    const client = new Anthropic({ apiKey });
-    const stream = await client.messages.create({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: prompt }],
-      stream: true,
-    });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const result = await model.generateContentStream(fullPrompt);
 
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          for await (const event of stream) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-              controller.enqueue(encoder.encode(event.delta.text));
-            }
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) controller.enqueue(encoder.encode(text));
           }
         } catch (err) {
           controller.enqueue(encoder.encode(`\n\n**ストリームエラー:** ${err}`));
@@ -160,11 +156,13 @@ ${fileSnippets ? `## コードサンプル\n${fileSnippets}` : ''}
   } catch (err) {
     console.error('AI analyze error:', err);
     const raw = err instanceof Error ? err.message : String(err);
-    // Detect credit balance error for a friendlier message
-    const isCreditError = raw.includes('credit balance') || raw.includes('too low') || raw.includes('402');
-    const message = isCreditError
-      ? 'APIクレジットが不足しています。Anthropic Console（console.anthropic.com → Billing）でクレジットを追加してください。'
-      : `Claude API エラー: ${raw}`;
-    return NextResponse.json({ error: message }, { status: isCreditError ? 402 : 500 });
+    const isQuotaError = raw.includes('quota') || raw.includes('429') || raw.includes('RESOURCE_EXHAUSTED');
+    const isKeyError = raw.includes('API_KEY_INVALID') || raw.includes('invalid') || raw.includes('401');
+    const message = isQuotaError
+      ? 'Gemini APIのクォータを超えました。しばらく待ってから再試行してください。'
+      : isKeyError
+      ? 'Gemini APIキーが無効です。Google AI Studio（aistudio.google.com）で正しいキーを確認してください。'
+      : `Gemini API エラー: ${raw}`;
+    return NextResponse.json({ error: message }, { status: isQuotaError ? 429 : isKeyError ? 401 : 500 });
   }
 }

@@ -44,13 +44,13 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
   const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('anthropic-api-key');
+    const saved = localStorage.getItem('gemini-api-key');
     if (saved) setApiKey(saved);
   }, []);
 
   function saveApiKey(key: string) {
     setApiKey(key);
-    localStorage.setItem('anthropic-api-key', key);
+    localStorage.setItem('gemini-api-key', key);
     setShowApiInput(false);
   }
 
@@ -90,7 +90,7 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-anthropic-api-key': apiKey,
+          'x-gemini-api-key': apiKey,
         },
         body: JSON.stringify({
           stats: graph.stats,
@@ -149,18 +149,18 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Key className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-sm font-semibold text-slate-200">Anthropic API Key</h3>
+                <h3 className="text-sm font-semibold text-slate-200">Gemini API Key</h3>
               </div>
               <button onClick={() => setShowApiInput(false)}>
                 <X className="w-4 h-4 text-slate-500 hover:text-slate-300" />
               </button>
             </div>
             <p className="text-xs text-slate-500 mb-4">
-              AI分析にはAnthropicのAPIキーが必要です。ブラウザのlocalStorageに保存されます。
+              AI分析にはGoogle GeminiのAPIキーが必要です。<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">Google AI Studio</a>で無料取得できます。ブラウザのlocalStorageに保存されます。
             </p>
             <input
               type="password"
-              placeholder="sk-ant-..."
+              placeholder="AIza..."
               className="w-full bg-[#0a0a0f] border border-[#2d2d3e] rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500 mb-4"
               defaultValue={apiKey}
               onKeyDown={(e) => {

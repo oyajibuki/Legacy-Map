@@ -17,7 +17,8 @@ const SKIP_DIRS = new Set([
   'node_modules', '.git', '.next', '__pycache__', '.venv', 'venv',
   'dist', 'build', '.cache', 'coverage', '.nyc_output', '.tox',
   'target', 'vendor', 'Pods', '.gradle', '.idea', '.vs',
-  'DerivedData', 'xcuserdata',
+  'DerivedData', 'xcuserdata', 'xcassets', 'appiconset', 'imageset',
+  'colorset', 'symbolset', 'Assets.xcassets',
 ]);
 
 // Extensions that are always binary — skip immediately
