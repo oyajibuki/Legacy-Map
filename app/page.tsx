@@ -6,7 +6,7 @@ import FileScanner from '@/components/FileScanner';
 import NodeDetail from '@/components/NodeDetail';
 import ReportPanel from '@/components/ReportPanel';
 import { DependencyGraph, FileNode, UploadedFile } from '@/lib/types';
-import { Map, RefreshCw, AlertTriangle, Shield, TrendingUp, Files, ChevronRight, GitBranch } from 'lucide-react';
+import { Map as MapIcon, RefreshCw, AlertTriangle, Shield, TrendingUp, Files, ChevronRight, GitBranch } from 'lucide-react';
 
 const LegacyGraph = dynamic(() => import('@/components/LegacyGraph'), { ssr: false });
 
@@ -57,7 +57,7 @@ export default function Home() {
       <header className="flex items-center justify-between px-6 py-3 border-b border-[#1e293b] bg-[#0a0a0f]/80 backdrop-blur-sm z-20 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
-            <Map className="w-4 h-4 text-indigo-400" />
+            <MapIcon className="w-4 h-4 text-indigo-400" />
           </div>
           <div>
             <h1 className="text-sm font-bold text-slate-200 tracking-wide">LegacyMap</h1>
@@ -91,7 +91,7 @@ export default function Home() {
           <div className="w-full max-w-md">
             <div className="text-center mb-8">
               <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center mx-auto mb-4">
-                <Map className="w-8 h-8 text-indigo-400" />
+                <MapIcon className="w-8 h-8 text-indigo-400" />
               </div>
               <h2 className="text-2xl font-bold text-slate-200 mb-2">LegacyMap</h2>
               <p className="text-slate-500 text-sm leading-relaxed">
