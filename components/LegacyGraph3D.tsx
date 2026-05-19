@@ -175,12 +175,41 @@ function fibSpherePos(i: number, total: number, radius: number) {
   };
 }
 
+// ── Build adjacency + connected components from links ─────
+function buildComponents(nodes: GNode[], links: GLink[]) {
+  const adj = new Map<string, Set<string>>();
+  for (const n of nodes) adj.set(n.id, new Set());
+  for (const l of links) {
+    const s = typeof l.source === 'object' ? (l.source as GNode).id : l.source as string;
+    const t = typeof l.target === 'object' ? (l.target as GNode).id : l.target as string;
+    adj.get(s)?.add(t); adj.get(t)?.add(s);
+  }
+  const compId = new Map<string, number>();
+  const compSizes: number[] = [];
+  for (const n of nodes) {
+    if (compId.has(n.id)) continue;
+    const id = compSizes.length;
+    let size = 0;
+    const q = [n.id];
+    while (q.length) {
+      const cur = q.shift()!;
+      if (compId.has(cur)) continue;
+      compId.set(cur, id);
+      size++;
+      for (const nb of (adj.get(cur) || [])) if (!compId.has(nb)) q.push(nb);
+    }
+    compSizes.push(size);
+  }
+  return { compId, compSizes };
+}
+
 // ── Component ──────────────────────────────────────────────
 export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Props) {
   const fgRef = useRef<any>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; node: GNode } | null>(null);
   const [showLayers, setShowLayers] = useState(true);
   const [colorMode, setColorMode] = useState<'risk' | 'layer'>('layer');
+  const [layoutMode, setLayoutMode] = useState<'layer' | 'cluster'>('layer');
 
   // Memoized data — only rebuilds when graph changes
   const graphData = useMemo(() => {
@@ -222,33 +251,91 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     };
   }, [graph]);
 
-  // Apply radial force after graph initialises → creates the concentric sphere shells
+  // Apply forces — switches between layer-shell and cluster modes
   useEffect(() => {
     if (!fgRef.current) return;
     const timer = setTimeout(() => {
       if (!fgRef.current) return;
       try {
-        // Use d3-force-3d's forceRadial to constrain nodes to their layer radius
         const { forceRadial } = require('d3-force-3d');
-        fgRef.current.d3Force(
-          'radial',
-          forceRadial((node: GNode) => LAYER_RADII[node.layer])
-            .strength(3.5)  // Strong pull to shell — stable even after cache clear
-        );
-        // Reduce link force to let radial dominate
-        const linkForce = fgRef.current.d3Force('link');
-        if (linkForce) linkForce.distance(25).strength(0.15);
-        // Reduce charge to allow spreading around each shell
-        const chargeForce = fgRef.current.d3Force('charge');
-        if (chargeForce) chargeForce.strength(-60);
-        // Reheat
+
+        if (layoutMode === 'cluster' && graphData.links.length > 0) {
+          // ── CLUSTER MODE: connected nodes pull together ───────────
+          const { compId, compSizes } = buildComponents(graphData.nodes, graphData.links);
+          const numComps = compSizes.length;
+
+          // Sort components by size descending, assign Fibonacci sphere centers
+          const sortedIdxs = compSizes
+            .map((size, i) => ({ i, size }))
+            .sort((a, b) => b.size - a.size)
+            .map(x => x.i);
+          const centerMap: Record<number, { x: number; y: number; z: number }> = {};
+          sortedIdxs.forEach((origId, rank) => {
+            centerMap[origId] = fibSpherePos(rank, numComps, 130);
+          });
+
+          // Pre-position nodes: cluster center + small layer-based offset within cluster
+          const INNER_R: Record<LayerKey, number> = { ui: 42, api: 28, service: 16, core: 7 };
+          const clk = new Map<string, number>(); // cluster_layer → counter
+          const clt = new Map<string, number>(); // cluster_layer → total
+          for (const n of graphData.nodes) {
+            const k = `${compId.get(n.id)}_${n.layer}`;
+            clt.set(k, (clt.get(k) ?? 0) + 1);
+          }
+          for (const n of graphData.nodes as any[]) {
+            const cid = compId.get(n.id as string) ?? 0;
+            const center = centerMap[cid] ?? { x: 0, y: 0, z: 0 };
+            const k = `${cid}_${n.layer}`;
+            const cnt = clk.get(k) ?? 0; clk.set(k, cnt + 1);
+            const off = fibSpherePos(cnt, clt.get(k) ?? 1, INNER_R[n.layer as LayerKey]);
+            n.x = center.x + off.x;
+            n.y = center.y + off.y;
+            n.z = center.z + off.z;
+          }
+
+          // Remove layer radial force; install cluster pull force
+          fgRef.current.d3Force('radial', null);
+          fgRef.current.d3Force('cluster', (alpha: number) => {
+            for (const n of fgRef.current.graphData().nodes) {
+              const cid = compId.get(n.id as string) ?? 0;
+              const center = centerMap[cid] ?? { x: 0, y: 0, z: 0 };
+              n.vx += (center.x - n.x) * 0.07 * alpha;
+              n.vy += (center.y - n.y) * 0.07 * alpha;
+              n.vz += (center.z - n.z) * 0.07 * alpha;
+            }
+          });
+          const lf = fgRef.current.d3Force('link');
+          if (lf) lf.distance(18).strength(0.6);
+          const cf = fgRef.current.d3Force('charge');
+          if (cf) cf.strength(-35);
+        } else {
+          // ── LAYER MODE: concentric sphere shells ──────────────────
+          // Re-seed positions on Fibonacci sphere by layer
+          const lt: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, core: 0 };
+          const lc: Record<LayerKey, number> = { ui: 0, api: 0, service: 0, core: 0 };
+          for (const n of graphData.nodes) lt[n.layer]++;
+          for (const n of graphData.nodes as any[]) {
+            const pos = fibSpherePos(lc[n.layer as LayerKey]++, lt[n.layer as LayerKey], LAYER_RADII[n.layer as LayerKey]);
+            n.x = pos.x; n.y = pos.y; n.z = pos.z;
+          }
+          fgRef.current.d3Force('cluster', null);
+          fgRef.current.d3Force(
+            'radial',
+            forceRadial((node: GNode) => LAYER_RADII[node.layer]).strength(3.5)
+          );
+          const lf = fgRef.current.d3Force('link');
+          if (lf) lf.distance(25).strength(0.15);
+          const cf = fgRef.current.d3Force('charge');
+          if (cf) cf.strength(-60);
+        }
+
         fgRef.current.d3ReheatSimulation();
       } catch (e) {
-        console.warn('Could not apply radial force:', e);
+        console.warn('Could not apply force:', e);
       }
-    }, 500);
+    }, 300);
     return () => clearTimeout(timer);
-  }, [graphData]);
+  }, [graphData, layoutMode]);
 
   // Node appearance
   const nodeThreeObject = useCallback((node: object) => {
@@ -397,6 +484,24 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
           <button onClick={() => setColorMode('risk')}
             className={`px-2.5 py-1.5 transition-colors border-l border-[#1e293b] ${colorMode === 'risk' ? 'bg-indigo-600 text-white font-medium' : 'bg-[#0d0d18] text-slate-400 hover:text-slate-200'}`}>
             リスク色
+          </button>
+        </div>
+
+        {/* Layout mode toggle */}
+        <div className="flex rounded-lg overflow-hidden border border-[#1e293b] text-xs">
+          <button
+            onClick={() => setLayoutMode('layer')}
+            title="レイヤー別に同心球状に配置"
+            className={`px-2.5 py-1.5 transition-colors ${layoutMode === 'layer' ? 'bg-violet-700 text-white font-medium' : 'bg-[#0d0d18] text-slate-400 hover:text-slate-200'}`}
+          >
+            🌐 レイヤー
+          </button>
+          <button
+            onClick={() => setLayoutMode('cluster')}
+            title="接続関係でグループ化して集約表示"
+            className={`px-2.5 py-1.5 transition-colors border-l border-[#1e293b] ${layoutMode === 'cluster' ? 'bg-violet-700 text-white font-medium' : 'bg-[#0d0d18] text-slate-400 hover:text-slate-200'}`}
+          >
+            🔗 集約
           </button>
         </div>
 
