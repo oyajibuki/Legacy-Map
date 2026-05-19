@@ -8,7 +8,7 @@ import ReportPanel from '@/components/ReportPanel';
 import { DependencyGraph, FileNode, UploadedFile } from '@/lib/types';
 import { Map as MapIcon, RefreshCw, AlertTriangle, Shield, TrendingUp, Files, ChevronRight, GitBranch } from 'lucide-react';
 
-const LegacyGraph = dynamic(() => import('@/components/LegacyGraph'), { ssr: false });
+const LegacyGraph3D = dynamic(() => import('@/components/LegacyGraph3D'), { ssr: false });
 
 type Step = 'upload' | 'viewing';
 
@@ -146,7 +146,7 @@ export default function Home() {
           {/* Main graph + report */}
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex-1 min-h-0">
-              <LegacyGraph graph={graph} selectedNode={selectedNode} onSelectNode={setSelectedNode} />
+              <LegacyGraph3D graph={graph} selectedNode={selectedNode} onSelectNode={setSelectedNode} />
             </div>
             <ReportPanel graph={graph} uploadedFiles={uploadedFiles} />
           </div>
