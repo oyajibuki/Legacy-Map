@@ -294,15 +294,19 @@ function detectCircularDeps(nodes: FileNode[]): string[][] {
   return cycles.slice(0, 10); // limit to first 10
 }
 
+const MAX_FILES = 500;
+const MAX_FILE_BYTES = 200_000; // 200KB per file
+
 export function analyzeFiles(uploadedFiles: UploadedFile[]): DependencyGraph {
-  // Filter out binary/skip files and hidden dirs
+  // Filter out binary/skip files and hidden dirs, and oversized files
   const validFiles = uploadedFiles.filter(f => {
     const ext = '.' + f.name.split('.').pop()!;
     if (SKIP_EXTENSIONS.has(ext.toLowerCase())) return false;
     const parts = f.path.split(/[/\\]/);
     if (parts.some(p => SKIP_DIRS.has(p))) return false;
+    if (f.content.length > MAX_FILE_BYTES) return false;
     return true;
-  });
+  }).slice(0, MAX_FILES);
 
   const allPaths = validFiles.map(f => f.path);
 
@@ -337,8 +341,19 @@ export function analyzeFiles(uploadedFiles: UploadedFile[]): DependencyGraph {
   // Resolve file dependencies
   const edgeMap = new Map<string, number>();
 
+  // Map Python file stems to their paths for internal module resolution
+  const pyFileStemMap = new Map<string, string>();
+  for (const p of allPaths) {
+    if (p.endsWith('.py')) {
+      const stem = p.split(/[/\\]/).pop()!.replace(/\.py$/, '');
+      pyFileStemMap.set(stem, p);
+    }
+  }
+
   for (const node of partialNodes) {
     const resolved: string[] = [];
+
+    // Resolve relative imports (all languages)
     for (const fi of node.fileImports) {
       const target = resolveRelativeImport(node.path, fi, allPaths);
       if (target && target !== node.id) {
@@ -347,6 +362,20 @@ export function analyzeFiles(uploadedFiles: UploadedFile[]): DependencyGraph {
         edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
       }
     }
+
+    // Python: also resolve absolute-style imports against local file stems
+    // e.g. `from utils import x` → links to utils.py if it exists in the project
+    if (node.extension === '.py') {
+      for (const pkg of node.imports) {
+        const target = pyFileStemMap.get(pkg);
+        if (target && target !== node.id) {
+          resolved.push(target);
+          const key = `${node.id}|||${target}`;
+          edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
+        }
+      }
+    }
+
     node.deps = [...new Set(resolved)];
   }
 

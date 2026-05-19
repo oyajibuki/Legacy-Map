@@ -6,7 +6,7 @@ import FileScanner from '@/components/FileScanner';
 import NodeDetail from '@/components/NodeDetail';
 import ReportPanel from '@/components/ReportPanel';
 import { DependencyGraph, FileNode, UploadedFile } from '@/lib/types';
-import { Map, RefreshCw, AlertTriangle, Shield, TrendingUp, Files } from 'lucide-react';
+import { Map, RefreshCw, AlertTriangle, Shield, TrendingUp, Files, ChevronRight, GitBranch } from 'lucide-react';
 
 const LegacyGraph = dynamic(() => import('@/components/LegacyGraph'), { ssr: false });
 
@@ -117,7 +117,7 @@ export default function Home() {
             {selectedNode ? (
               <NodeDetail node={selectedNode} onClose={() => setSelectedNode(null)} />
             ) : (
-              <ProjectOverview graph={graph} />
+              <ProjectOverview graph={graph} onSelectNode={setSelectedNode} />
             )}
           </div>
 
@@ -144,9 +144,41 @@ function StatChip({ icon, value, label, color }: { icon: React.ReactNode; value:
   );
 }
 
-function ProjectOverview({ graph }: { graph: DependencyGraph }) {
+function ProjectOverview({ graph, onSelectNode }: { graph: DependencyGraph; onSelectNode: (node: FileNode | null) => void }) {
+  // Top risky files
+  const topRisk = [...graph.nodes]
+    .filter(n => n.riskLevel !== 'safe')
+    .sort((a, b) => b.riskScore - a.riskScore)
+    .slice(0, 8);
+
+  // Hub files: most dependents (highest blast radius)
+  const topHubs = [...graph.nodes]
+    .filter(n => n.dependents.length > 0)
+    .sort((a, b) => b.dependents.length - a.dependents.length)
+    .slice(0, 5);
+
+  // Directory breakdown
+  const dirMap = new Map<string, { total: number; risk: number }>();
+  for (const n of graph.nodes) {
+    const parts = n.path.split('/');
+    const dir = parts.length > 1 ? parts[0] : '(root)';
+    const prev = dirMap.get(dir) ?? { total: 0, risk: 0 };
+    dirMap.set(dir, {
+      total: prev.total + 1,
+      risk: prev.risk + (n.riskLevel !== 'safe' ? 1 : 0),
+    });
+  }
+  const dirs = [...dirMap.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 6);
+
+  const riskBadge = (level: string) => {
+    if (level === 'critical') return <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">緊急</span>;
+    if (level === 'risk') return <span className="text-[10px] px-1 py-0.5 rounded bg-orange-500/20 text-orange-400 font-bold">危険</span>;
+    return <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">注意</span>;
+  };
+
   return (
     <div className="flex flex-col h-full overflow-y-auto p-4 gap-4">
+      {/* Stats grid */}
       <div>
         <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-3">プロジェクト概要</p>
         <div className="grid grid-cols-2 gap-2">
@@ -170,26 +202,90 @@ function ProjectOverview({ graph }: { graph: DependencyGraph }) {
         <div className="flex flex-col gap-1.5">
           {[
             { label: '緊急対応', count: graph.stats.criticalFiles, color: 'bg-red-500', textColor: 'text-red-400' },
-            { label: '危険', count: graph.stats.riskFiles, color: 'bg-orange-500', textColor: 'text-orange-400' },
-            { label: '要注意', count: graph.stats.cautionFiles, color: 'bg-amber-500', textColor: 'text-amber-400' },
-            { label: '安全', count: graph.stats.safeFiles, color: 'bg-slate-600', textColor: 'text-slate-400' },
+            { label: '危険',     count: graph.stats.riskFiles,     color: 'bg-orange-500', textColor: 'text-orange-400' },
+            { label: '要注意',   count: graph.stats.cautionFiles,  color: 'bg-amber-500',  textColor: 'text-amber-400' },
+            { label: '安全',     count: graph.stats.safeFiles,     color: 'bg-slate-600',  textColor: 'text-slate-400' },
           ].map(({ label, count, color, textColor }) => (
             <div key={label} className="flex items-center gap-2">
               <div className="flex-1 flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${color}`} />
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${color}`} />
                 <span className={`text-xs ${textColor}`}>{label}</span>
               </div>
-              <span className="text-xs font-mono text-slate-500">{count}</span>
-              <div className="w-16 h-1.5 bg-[#1e1e2e] rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${color}`}
-                  style={{ width: `${graph.stats.totalFiles > 0 ? (count / graph.stats.totalFiles) * 100 : 0}%` }}
-                />
+              <span className="text-xs font-mono text-slate-500 w-6 text-right">{count}</span>
+              <div className="w-14 h-1.5 bg-[#1e1e2e] rounded-full overflow-hidden flex-shrink-0">
+                <div className={`h-full rounded-full ${color}`}
+                  style={{ width: `${graph.stats.totalFiles > 0 ? (count / graph.stats.totalFiles) * 100 : 0}%` }} />
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Top risky files — clickable */}
+      {topRisk.length > 0 && (
+        <div>
+          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-2">
+            要対応ファイル TOP
+          </p>
+          <div className="flex flex-col gap-1">
+            {topRisk.map(node => (
+              <button
+                key={node.id}
+                onClick={() => onSelectNode(node)}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-[#0f0f1a] border border-[#1e293b] hover:border-indigo-500/40 hover:bg-indigo-500/5 transition-colors text-left group"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-300 truncate group-hover:text-slate-100">{node.name}</p>
+                  <p className="text-[10px] text-slate-600 truncate">{node.path.split('/').slice(0, -1).join('/')}</p>
+                </div>
+                {riskBadge(node.riskLevel)}
+                <ChevronRight className="w-3 h-3 text-slate-600 flex-shrink-0 group-hover:text-slate-400" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Hub files — high blast radius */}
+      {topHubs.length > 0 && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <GitBranch className="w-3 h-3 text-slate-500" />
+            <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">ハブファイル（高影響度）</p>
+          </div>
+          <div className="flex flex-col gap-1">
+            {topHubs.map(node => (
+              <button
+                key={node.id}
+                onClick={() => onSelectNode(node)}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-[#0f0f1a] border border-[#1e293b] hover:border-indigo-500/40 hover:bg-indigo-500/5 transition-colors text-left group"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-300 truncate group-hover:text-slate-100">{node.name}</p>
+                </div>
+                <span className="text-[10px] text-slate-500 flex-shrink-0">{node.dependents.length}依存</span>
+                <ChevronRight className="w-3 h-3 text-slate-600 flex-shrink-0 group-hover:text-slate-400" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Directory breakdown */}
+      {dirs.length > 1 && (
+        <div>
+          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-2">ディレクトリ構成</p>
+          <div className="flex flex-col gap-1">
+            {dirs.map(([dir, { total, risk }]) => (
+              <div key={dir} className="flex items-center gap-2 px-2 py-1 rounded bg-[#0f0f1a] border border-[#1e293b]">
+                <p className="text-xs text-slate-400 flex-1 truncate font-mono">{dir}/</p>
+                <span className="text-[10px] text-slate-600">{total}件</span>
+                {risk > 0 && <span className="text-[10px] text-red-400">{risk}要対応</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Languages */}
       {graph.stats.languages.length > 0 && (
