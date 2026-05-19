@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { DependencyGraph } from '@/lib/types';
+
+export const maxDuration = 60;
+
+interface SlimNode {
+  path: string;
+  language: string;
+  lines: number;
+  riskScore: number;
+  riskLevel: string;
+  riskFactors: { type: string; description: string; severity: string }[];
+  eolPackages: { name: string; eol: string; risk: string; note: string }[];
+}
+
+interface AnalyzePayload {
+  stats: Record<string, unknown>;
+  topRiskyNodes: SlimNode[];
+  topFiles: { path: string; content: string }[];
+  languages: string[];
+  mode: 'operation' | 'migration';
+}
 
 export async function POST(req: NextRequest) {
   const apiKey = req.headers.get('x-anthropic-api-key');
@@ -8,28 +27,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Anthropic API key required' }, { status: 401 });
   }
 
-  const client = new Anthropic({ apiKey });
+  let body: AnalyzePayload;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'リクエストの解析に失敗しました。データが大きすぎる可能性があります。' }, { status: 400 });
+  }
 
-  const body = await req.json();
-  const graph: DependencyGraph = body.graph;
-  const topFiles: { path: string; content: string }[] = body.topFiles || [];
-  const mode: 'operation' | 'migration' = body.mode || 'operation';
+  const { stats, topRiskyNodes, topFiles = [], languages = [], mode = 'operation' } = body;
 
-  const statsStr = JSON.stringify(graph.stats, null, 2);
-  const topRiskyNodes = graph.nodes
-    .filter(n => n.riskLevel === 'critical' || n.riskLevel === 'risk')
-    .sort((a, b) => b.riskScore - a.riskScore)
-    .slice(0, 10)
-    .map(n => ({
-      path: n.path,
-      language: n.language,
-      lines: n.lines,
-      riskScore: n.riskScore,
-      riskLevel: n.riskLevel,
-      riskFactors: n.riskFactors,
-      eolPackages: n.eolPackages,
-    }));
-
+  const statsStr = JSON.stringify(stats, null, 2);
   const fileSnippets = topFiles
     .slice(0, 3)
     .map(f => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 1500)}\n\`\`\``)
@@ -48,7 +55,7 @@ ${statsStr}
 
 ## リスクの高いファイルTop10
 \`\`\`json
-${JSON.stringify(topRiskyNodes, null, 2)}
+${JSON.stringify(topRiskyNodes.slice(0, 10), null, 2)}
 \`\`\`
 
 ${fileSnippets ? `## コードサンプル\n${fileSnippets}` : ''}
@@ -85,7 +92,7 @@ ${statsStr}
 
 ## リスクの高いファイルTop10
 \`\`\`json
-${JSON.stringify(topRiskyNodes, null, 2)}
+${JSON.stringify(topRiskyNodes.slice(0, 10), null, 2)}
 \`\`\`
 
 ${fileSnippets ? `## コードサンプル\n${fileSnippets}` : ''}
@@ -107,7 +114,7 @@ ${fileSnippets ? `## コードサンプル\n${fileSnippets}` : ''}
 - Phase 3（6ヶ月〜）: アーキテクチャ刷新
 
 ### 4. 言語・フレームワーク移行先の提案
-- 検出言語: ${graph.stats.languages.join(', ')}
+- 検出言語: ${languages.join(', ')}
 - 各言語の推奨移行先と理由
 
 ### 5. 移行時の注意点
@@ -120,27 +127,39 @@ ${fileSnippets ? `## コードサンプル\n${fileSnippets}` : ''}
 
   const prompt = mode === 'migration' ? migrationPrompt : operationPrompt;
 
-  const stream = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: prompt }],
-    stream: true,
-  });
+  try {
+    const client = new Anthropic({ apiKey });
+    const stream = await client.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+    });
 
-  const encoder = new TextEncoder();
-  const readable = new ReadableStream({
-    async start(controller) {
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          controller.enqueue(encoder.encode(event.delta.text));
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              controller.enqueue(encoder.encode(event.delta.text));
+            }
+          }
+        } catch (err) {
+          controller.enqueue(encoder.encode(`\n\n**ストリームエラー:** ${err}`));
+        } finally {
+          controller.close();
         }
-      }
-      controller.close();
-    },
-  });
+      },
+    });
 
-  return new Response(readable, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-  });
+    return new Response(readable, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  } catch (err) {
+    console.error('AI analyze error:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: `Claude API エラー: ${message}` }, { status: 500 });
+  }
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DependencyGraph, FileNode } from '@/lib/types';
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
@@ -88,7 +88,8 @@ export default function LegacyGraph({ graph, selectedNode, onSelectNode }: Props
     return () => window.removeEventListener('resize', update);
   }, []);
 
-  const graphData = {
+  // Memoize so node selection doesn't restart the force simulation
+  const graphData = useMemo(() => ({
     nodes: graph.nodes.map((n): GraphNode => ({
       id: n.id,
       name: n.name,
@@ -104,7 +105,7 @@ export default function LegacyGraph({ graph, selectedNode, onSelectNode }: Props
       target: e.target,
       weight: e.weight,
     })),
-  };
+  }), [graph]);
 
   // Node drawing
   const nodeCanvasObject = useCallback((node: object, ctx: CanvasRenderingContext2D, globalScale: number) => {

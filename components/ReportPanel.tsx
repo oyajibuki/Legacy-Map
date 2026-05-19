@@ -65,15 +65,24 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
     setIsOpen(true);
     setActiveTab(mode);
 
-    // Get top risky files content
-    const topRisky = graph.nodes
+    // Build slim payload — don't send full graph object
+    const topRiskyNodes = graph.nodes
       .filter(n => n.riskLevel === 'critical' || n.riskLevel === 'risk')
       .sort((a, b) => b.riskScore - a.riskScore)
-      .slice(0, 3);
+      .slice(0, 10)
+      .map(n => ({
+        path: n.path,
+        language: n.language,
+        lines: n.lines,
+        riskScore: n.riskScore,
+        riskLevel: n.riskLevel,
+        riskFactors: n.riskFactors,
+        eolPackages: n.eolPackages,
+      }));
 
-    const topFiles = topRisky.map(node => {
-      const uploaded = uploadedFiles.find(f => f.path === node.id);
-      return { path: node.path, content: uploaded?.content || '' };
+    const topFiles = topRiskyNodes.slice(0, 3).map(node => {
+      const uploaded = uploadedFiles.find(f => f.path === node.path);
+      return { path: node.path, content: uploaded?.content?.slice(0, 1500) || '' };
     });
 
     try {
@@ -83,12 +92,24 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
           'Content-Type': 'application/json',
           'x-anthropic-api-key': apiKey,
         },
-        body: JSON.stringify({ graph, topFiles, mode }),
+        body: JSON.stringify({
+          stats: graph.stats,
+          topRiskyNodes,
+          topFiles,
+          languages: graph.stats.languages,
+          mode,
+        }),
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        setReports(prev => ({ ...prev, [mode]: `エラー: ${err.error}` }));
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const err = await res.json();
+          errMsg = err.error || errMsg;
+        } catch {
+          errMsg = (await res.text().catch(() => '')) || errMsg;
+        }
+        setReports(prev => ({ ...prev, [mode]: `エラー: ${errMsg}` }));
         return;
       }
 

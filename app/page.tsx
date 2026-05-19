@@ -19,6 +19,7 @@ export default function Home() {
   const [selectedNode, setSelectedNode] = useState<FileNode | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState('');
+  const [leftTab, setLeftTab] = useState<'overview' | 'structure'>('overview');
 
   async function handleFilesReady(files: UploadedFile[]) {
     setUploadedFiles(files);
@@ -117,7 +118,28 @@ export default function Home() {
             {selectedNode ? (
               <NodeDetail node={selectedNode} onClose={() => setSelectedNode(null)} />
             ) : (
-              <ProjectOverview graph={graph} onSelectNode={setSelectedNode} />
+              <>
+                {/* Tab bar */}
+                <div className="flex border-b border-[#1e293b] flex-shrink-0">
+                  {(['overview', 'structure'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setLeftTab(tab)}
+                      className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                        leftTab === tab
+                          ? 'text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/5'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {tab === 'overview' ? '概要' : '構造'}
+                    </button>
+                  ))}
+                </div>
+                {leftTab === 'overview'
+                  ? <ProjectOverview graph={graph} onSelectNode={setSelectedNode} />
+                  : <StructureView graph={graph} onSelectNode={setSelectedNode} />
+                }
+              </>
             )}
           </div>
 
@@ -340,6 +362,168 @@ function ProjectOverview({ graph, onSelectNode }: { graph: DependencyGraph; onSe
           下部の「AI分析」でレポート生成。
         </p>
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────
+// Directory role inference
+// ──────────────────────────────────────────────────────
+const DIR_ROLES: Record<string, string> = {
+  components: 'UIコンポーネント', component: 'UIコンポーネント',
+  pages: 'ページ', page: 'ページ', views: 'ページ', screens: 'ページ',
+  app: 'アプリルート',
+  api: 'APIエンドポイント', routes: 'ルーティング', router: 'ルーティング',
+  lib: 'ライブラリ', libs: 'ライブラリ', utils: 'ユーティリティ', util: 'ユーティリティ',
+  helpers: 'ヘルパー', common: '共通モジュール', shared: '共通モジュール',
+  hooks: 'カスタムHooks', hook: 'カスタムHooks',
+  store: '状態管理', stores: '状態管理', redux: '状態管理', context: '状態管理',
+  services: 'サービス層', service: 'サービス層', client: 'クライアント',
+  models: 'データモデル', model: 'データモデル', types: '型定義', interfaces: '型定義',
+  db: 'データベース', database: 'データベース', migrations: 'DBマイグレーション',
+  tests: 'テスト', test: 'テスト', __tests__: 'テスト', spec: 'テスト', specs: 'テスト',
+  scripts: 'スクリプト', bin: 'CLIツール', cmd: 'CLIツール',
+  config: '設定', configs: '設定', settings: '設定',
+  assets: '静的アセット', static: '静的アセット', public: '静的アセット',
+  styles: 'スタイル', css: 'スタイル', scss: 'スタイル',
+  docs: 'ドキュメント', doc: 'ドキュメント',
+  // C / DOOM directories
+  linuxdoom: 'Linux Doom ソース', doom: 'Doomソース',
+  src: 'ソースコード',
+};
+
+function inferRole(dir: string): string {
+  const lower = dir.toLowerCase().replace(/[-_.]/g, '');
+  return DIR_ROLES[lower] || DIR_ROLES[dir.toLowerCase()] || '';
+}
+
+// ──────────────────────────────────────────────────────
+// StructureView — directory tree with expand/collapse
+// ──────────────────────────────────────────────────────
+function StructureView({ graph, onSelectNode }: { graph: DependencyGraph; onSelectNode: (n: FileNode | null) => void }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Build directory tree (2 levels deep)
+  const dirTree = new Map<string, { files: FileNode[]; subdirs: Map<string, FileNode[]> }>();
+
+  for (const n of graph.nodes) {
+    const parts = n.path.split('/');
+    const topDir = parts.length > 1 ? parts[0] : '(root)';
+    const subDir = parts.length > 2 ? parts[1] : '';
+
+    if (!dirTree.has(topDir)) dirTree.set(topDir, { files: [], subdirs: new Map() });
+    const entry = dirTree.get(topDir)!;
+
+    if (subDir) {
+      if (!entry.subdirs.has(subDir)) entry.subdirs.set(subDir, []);
+      entry.subdirs.get(subDir)!.push(n);
+    } else {
+      entry.files.push(n);
+    }
+  }
+
+  const sortedDirs = [...dirTree.entries()].sort((a, b) => {
+    const aTotal = a[1].files.length + [...a[1].subdirs.values()].reduce((s, f) => s + f.length, 0);
+    const bTotal = b[1].files.length + [...b[1].subdirs.values()].reduce((s, f) => s + f.length, 0);
+    return bTotal - aTotal;
+  });
+
+  const riskDot = (level: string) => {
+    const cls = level === 'critical' ? 'bg-red-500' : level === 'risk' ? 'bg-orange-400' : level === 'caution' ? 'bg-amber-400' : 'bg-slate-600';
+    return <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cls}`} />;
+  };
+
+  const toggle = (key: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  return (
+    <div className="flex flex-col h-full overflow-y-auto p-3 gap-0.5">
+      <p className="text-xs text-slate-500 font-medium uppercase tracking-wider px-1 py-2">ディレクトリ構造</p>
+      {sortedDirs.map(([dir, { files, subdirs }]) => {
+        const allFiles = [...files, ...[...subdirs.values()].flat()];
+        const riskCount = allFiles.filter(n => n.riskLevel !== 'safe').length;
+        const role = inferRole(dir);
+        const isOpen = expanded.has(dir);
+        const total = allFiles.length;
+
+        return (
+          <div key={dir}>
+            {/* Directory row */}
+            <button
+              onClick={() => toggle(dir)}
+              className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-[#1a1a28] transition-colors text-left group"
+            >
+              <span className="text-slate-500 w-3 text-center text-xs flex-shrink-0">
+                {isOpen ? '▾' : '▸'}
+              </span>
+              <span className="text-xs font-mono text-slate-300 truncate flex-1">{dir}/</span>
+              {role && <span className="text-[10px] text-indigo-400/70 flex-shrink-0 hidden group-hover:block">{role}</span>}
+              <span className="text-[10px] text-slate-600 flex-shrink-0">{total}</span>
+              {riskCount > 0 && <span className="text-[10px] text-red-400 flex-shrink-0">⚠{riskCount}</span>}
+            </button>
+
+            {/* Role label when open */}
+            {isOpen && role && (
+              <div className="ml-7 mb-1 text-[10px] text-indigo-400/60 px-1">{role}</div>
+            )}
+
+            {/* Files & subdirs */}
+            {isOpen && (
+              <div className="ml-5 flex flex-col gap-0.5 mb-1">
+                {/* Direct files */}
+                {files.map(n => (
+                  <button
+                    key={n.id}
+                    onClick={() => onSelectNode(n)}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[#1e1e2e] text-left transition-colors"
+                  >
+                    {riskDot(n.riskLevel)}
+                    <span className="text-xs text-slate-400 truncate hover:text-slate-200">{n.name}</span>
+                    <span className="text-[10px] text-slate-600 ml-auto flex-shrink-0">{n.lines.toLocaleString()}行</span>
+                  </button>
+                ))}
+                {/* Subdirs */}
+                {[...subdirs.entries()].map(([sub, subFiles]) => {
+                  const subKey = `${dir}/${sub}`;
+                  const subOpen = expanded.has(subKey);
+                  const subRisk = subFiles.filter(n => n.riskLevel !== 'safe').length;
+                  return (
+                    <div key={sub}>
+                      <button
+                        onClick={() => toggle(subKey)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[#1a1a28] text-left transition-colors w-full"
+                      >
+                        <span className="text-slate-600 w-2.5 text-[10px]">{subOpen ? '▾' : '▸'}</span>
+                        <span className="text-xs font-mono text-slate-500 truncate flex-1">{sub}/</span>
+                        <span className="text-[10px] text-slate-600">{subFiles.length}</span>
+                        {subRisk > 0 && <span className="text-[10px] text-red-400">⚠{subRisk}</span>}
+                      </button>
+                      {subOpen && (
+                        <div className="ml-4 flex flex-col gap-0.5">
+                          {subFiles.map(n => (
+                            <button
+                              key={n.id}
+                              onClick={() => onSelectNode(n)}
+                              className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[#1e1e2e] text-left transition-colors"
+                            >
+                              {riskDot(n.riskLevel)}
+                              <span className="text-xs text-slate-400 truncate hover:text-slate-200">{n.name}</span>
+                              <span className="text-[10px] text-slate-600 ml-auto flex-shrink-0">{n.lines.toLocaleString()}行</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
