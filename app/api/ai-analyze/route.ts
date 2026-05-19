@@ -130,7 +130,7 @@ ${fileSnippets ? `## コードサンプル\n${fileSnippets}` : ''}
   try {
     const client = new Anthropic({ apiKey });
     const stream = await client.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }],
@@ -159,7 +159,12 @@ ${fileSnippets ? `## コードサンプル\n${fileSnippets}` : ''}
     });
   } catch (err) {
     console.error('AI analyze error:', err);
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: `Claude API エラー: ${message}` }, { status: 500 });
+    const raw = err instanceof Error ? err.message : String(err);
+    // Detect credit balance error for a friendlier message
+    const isCreditError = raw.includes('credit balance') || raw.includes('too low') || raw.includes('402');
+    const message = isCreditError
+      ? 'APIクレジットが不足しています。Anthropic Console（console.anthropic.com → Billing）でクレジットを追加してください。'
+      : `Claude API エラー: ${raw}`;
+    return NextResponse.json({ error: message }, { status: isCreditError ? 402 : 500 });
   }
 }

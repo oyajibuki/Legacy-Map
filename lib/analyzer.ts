@@ -114,11 +114,35 @@ function extractCIncludes(content: string): { packages: string[]; relativeImport
   return { packages: [...new Set(packages)], relativeImports: [...new Set(relativeImports)] };
 }
 
+// Extract Swift imports (framework-level)
+function extractSwiftImports(content: string): { packages: string[]; relativeImports: string[] } {
+  const packages: string[] = [];
+  // `import UIKit`, `import Foundation`, `import MyFramework`
+  const pattern = /^import\s+([A-Za-z_][A-Za-z0-9_.]+)/gm;
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    packages.push(match[1]);
+  }
+  return { packages: [...new Set(packages)], relativeImports: [] };
+}
+
+// Extract Swift type definitions (class/struct/protocol/enum/actor)
+function extractSwiftTypeDefs(content: string): string[] {
+  const defs: string[] = [];
+  const pattern = /\b(?:class|struct|protocol|enum|actor|typealias)\s+([A-Z][A-Za-z0-9_]*)/g;
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    defs.push(match[1]);
+  }
+  return [...new Set(defs)];
+}
+
 function extractImports(content: string, ext: string): { packages: string[]; relativeImports: string[] } {
   const e = ext.toLowerCase();
   if (['.ts', '.tsx', '.js', '.jsx', '.mjs'].includes(e)) return extractJsImports(content);
   if (e === '.py') return extractPyImports(content);
   if (['.c', '.cpp', '.cc', '.cxx', '.h', '.hpp'].includes(e)) return extractCIncludes(content);
+  if (e === '.swift') return extractSwiftImports(content);
   return { packages: [], relativeImports: [] };
 }
 
@@ -350,6 +374,20 @@ export function analyzeFiles(uploadedFiles: UploadedFile[]): DependencyGraph {
     }
   }
 
+  // Swift: build a map of typeName → filePath from all Swift type definitions
+  // Used to detect implicit inter-file references (Swift files in same module don't use imports)
+  const swiftTypeDefMap = new Map<string, string>(); // typeName → defining file path
+  for (const node of partialNodes) {
+    if (node.extension === '.swift') {
+      const file = validFiles.find(f => f.path === node.id);
+      if (file) {
+        for (const typeName of extractSwiftTypeDefs(file.content)) {
+          swiftTypeDefMap.set(typeName, node.id);
+        }
+      }
+    }
+  }
+
   for (const node of partialNodes) {
     const resolved: string[] = [];
 
@@ -372,6 +410,31 @@ export function analyzeFiles(uploadedFiles: UploadedFile[]): DependencyGraph {
           resolved.push(target);
           const key = `${node.id}|||${target}`;
           edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
+        }
+      }
+    }
+
+    // Swift: detect inter-file type references
+    // Swift files in the same module don't import each other, but reference each other's types.
+    // Scan file content for any type names defined in OTHER Swift files.
+    if (node.extension === '.swift' && swiftTypeDefMap.size > 0) {
+      const file = validFiles.find(f => f.path === node.id);
+      if (file) {
+        // Find all CapitalizedWord references in this file
+        const refPattern = /\b([A-Z][A-Za-z0-9_]+)\b/g;
+        const seen = new Set<string>();
+        let m;
+        while ((m = refPattern.exec(file.content)) !== null) {
+          const typeName = m[1];
+          if (seen.has(typeName)) continue;
+          seen.add(typeName);
+          const target = swiftTypeDefMap.get(typeName);
+          // Only link if the type is defined in a DIFFERENT Swift file
+          if (target && target !== node.id) {
+            resolved.push(target);
+            const key = `${node.id}|||${target}`;
+            edgeMap.set(key, (edgeMap.get(key) || 0) + 1);
+          }
         }
       }
     }

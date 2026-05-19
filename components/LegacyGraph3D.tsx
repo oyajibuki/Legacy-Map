@@ -160,45 +160,73 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     const n = node as GNode;
     const THREE = require('three');
     const isSelected = selectedNode?.id === n.id;
-    const radius = Math.max(2.5, n.val * 2);
+    const isCore = n.layer === 'core';
+
+    // Core nodes are bigger and use a special geometry to stand out
+    const baseRadius = Math.max(2.5, n.val * 2);
+    const radius = isCore ? baseRadius * 1.8 : baseRadius;
 
     const group = new THREE.Group();
 
-    // Main sphere
-    const geo = new THREE.SphereGeometry(radius, 12, 8);
+    // Main body — core uses Icosahedron (crystal shape) to look like the nucleus
+    const geo = isCore
+      ? new THREE.IcosahedronGeometry(radius, 1)
+      : new THREE.SphereGeometry(radius, 12, 8);
     const fillColor = colorMode === 'layer'
       ? LAYERS[n.layer].color
       : riskColor(n.riskLevel);
     const mat = new THREE.MeshLambertMaterial({
       color: fillColor,
       transparent: true,
-      opacity: n.riskLevel === 'safe' ? 0.7 : 0.9,
+      opacity: n.riskLevel === 'safe' ? 0.75 : 0.92,
     });
-    const mesh = new THREE.Mesh(geo, mat);
-    group.add(mesh);
+    group.add(new THREE.Mesh(geo, mat));
 
-    // Risk indicator — only critical gets the Saturn ring; risk gets a corona glow
+    // Core layer: always gets a multi-layer glow regardless of risk level
+    if (isCore) {
+      // Inner glow (dense)
+      const glow1 = new THREE.SphereGeometry(radius * 1.6, 10, 8);
+      const mat1 = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(LAYERS.core.color),
+        transparent: true, opacity: 0.22, side: THREE.BackSide,
+      });
+      group.add(new THREE.Mesh(glow1, mat1));
+      // Outer glow (diffuse)
+      const glow2 = new THREE.SphereGeometry(radius * 2.5, 10, 8);
+      const mat2 = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(LAYERS.core.color),
+        transparent: true, opacity: 0.08, side: THREE.BackSide,
+      });
+      group.add(new THREE.Mesh(glow2, mat2));
+      // Equatorial ring (like an atom nucleus)
+      const ringGeo = new THREE.TorusGeometry(radius * 1.4, radius * 0.06, 6, 32);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(LAYERS.core.color),
+        transparent: true, opacity: 0.55,
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI / 2;
+      group.add(ring);
+    }
+
+    // Risk indicator — only critical gets the Saturn ring; risk gets an orange corona
     if (n.riskLevel === 'critical') {
-      // Saturn-style ring (reserved for most dangerous)
       const ringGeo = new THREE.TorusGeometry(radius * 1.8, radius * 0.12, 6, 24);
       const ringMat = new THREE.MeshBasicMaterial({ color: 0xdc2626, transparent: true, opacity: 0.85 });
       const ring = new THREE.Mesh(ringGeo, ringMat);
       ring.rotation.x = Math.PI / 3;
       group.add(ring);
     } else if (n.riskLevel === 'risk') {
-      // Corona glow sphere (orange aura, no ring)
       const coronaGeo = new THREE.SphereGeometry(radius * 1.5, 8, 6);
       const coronaMat = new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.18, side: THREE.BackSide });
       group.add(new THREE.Mesh(coronaGeo, coronaMat));
     }
 
-    // Selection ring
+    // Selection highlight
     if (isSelected) {
       const selGeo = new THREE.TorusGeometry(radius * 2, radius * 0.15, 8, 32);
       const selMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, transparent: true, opacity: 0.9 });
-      const sel = new THREE.Mesh(selGeo, selMat);
-      group.add(sel);
-      // Extra outer glow
+      group.add(new THREE.Mesh(selGeo, selMat));
       const glowGeo = new THREE.SphereGeometry(radius * 1.6, 12, 8);
       const glowMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, transparent: true, opacity: 0.15, side: THREE.BackSide });
       group.add(new THREE.Mesh(glowGeo, glowMat));
@@ -305,8 +333,9 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
             ))}
             <div className="border-t border-[#1e293b] mt-2 pt-2 space-y-0.5">
               <p className="text-slate-600 text-[10px]">外周 → UI（表面）</p>
-              <p className="text-slate-600 text-[10px]">中心 → コア（内核）</p>
+              <p className="text-slate-600 text-[10px]">中心 → コア（内核・光る多面体）</p>
               <p className="text-slate-600 text-[10px]">太い線 = 強い依存関係</p>
+              <p className="text-slate-600 text-[10px]">土星リング = 緊急リスク</p>
             </div>
           </div>
         )}

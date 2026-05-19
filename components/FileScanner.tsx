@@ -12,6 +12,33 @@ interface Props {
 const MAX_FILE_SIZE = 500 * 1024; // 500KB per file
 const MAX_CONTENT_LENGTH = 100 * 1024; // 100KB content limit for analysis
 
+// Directories to skip before even reading file content
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', '.next', '__pycache__', '.venv', 'venv',
+  'dist', 'build', '.cache', 'coverage', '.nyc_output', '.tox',
+  'target', 'vendor', 'Pods', '.gradle', '.idea', '.vs',
+  'DerivedData', 'xcuserdata',
+]);
+
+// Extensions that are always binary — skip immediately
+const SKIP_EXTENSIONS = new Set([
+  '', // git objects (no extension)
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.bmp',
+  '.mp4', '.mp3', '.wav', '.pdf', '.zip', '.tar', '.gz', '.7z',
+  '.woff', '.woff2', '.ttf', '.eot', '.otf',
+  '.lock', '.sum', '.pyc', '.pyo', '.class', '.o', '.obj',
+  '.exe', '.dll', '.so', '.dylib', '.a', '.lib',
+  '.xcuserstate', '.pbxproj',
+]);
+
+function shouldSkip(relPath: string, name: string): boolean {
+  const parts = relPath.replace(/\\/g, '/').split('/');
+  if (parts.some(p => SKIP_DIRS.has(p))) return true;
+  const ext = name.includes('.') ? '.' + name.split('.').pop()!.toLowerCase() : '';
+  if (SKIP_EXTENSIONS.has(ext)) return true;
+  return false;
+}
+
 export default function FileScanner({ onFilesReady, isAnalyzing }: Props) {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -22,17 +49,22 @@ export default function FileScanner({ onFilesReady, isAnalyzing }: Props) {
     const files: UploadedFile[] = [];
     const total = fileList.length;
 
+    let readCount = 0;
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
+      const relPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+
+      // Skip binary/irrelevant files before reading (fast path — no I/O)
+      if (shouldSkip(relPath, file.name)) continue;
       if (file.size > MAX_FILE_SIZE) continue;
 
-      setLoadingMsg(`読み込み中 ${i + 1}/${total}: ${file.name}`);
+      readCount++;
+      setLoadingMsg(`読み込み中 ${readCount}: ${file.name}`);
 
       try {
         const content = await file.text();
-        const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
         files.push({
-          path: path.replace(/\\/g, '/'),
+          path: relPath.replace(/\\/g, '/'),
           name: file.name,
           content: content.slice(0, MAX_CONTENT_LENGTH),
           size: file.size,
