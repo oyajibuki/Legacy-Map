@@ -81,6 +81,7 @@ type GNode = {
   language: string;
   lines: number;
   val: number;
+  degree: number;   // total in+out connections (used for link thickness)
   color: string;
   // D3 position (mutated in place)
   x?: number; y?: number; z?: number;
@@ -97,26 +98,34 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
   const [colorMode, setColorMode] = useState<'risk' | 'layer'>('layer');
 
   // Memoized data — only rebuilds when graph changes
-  const graphData = useMemo(() => ({
-    nodes: graph.nodes.map((n): GNode => {
-      const layer = detectLayer(n.path, n.extension, n.name);
-      const layerColor = LAYERS[layer].color;
-      return {
-        id: n.id,
-        name: n.name,
-        layer,
-        riskLevel: n.riskLevel,
-        riskScore: n.riskScore,
-        language: n.language,
-        lines: n.lines,
-        val: Math.max(1, Math.min(8, n.lines / 100)),
-        color: layerColor,
-      };
-    }),
-    links: graph.edges.map((e): GLink => ({
-      source: e.source, target: e.target, weight: e.weight,
-    })),
-  }), [graph]);
+  const graphData = useMemo(() => {
+    // Pre-compute degree (total connections per node) for link thickness
+    const degreeMap = new Map<string, number>();
+    for (const e of graph.edges) {
+      degreeMap.set(e.source, (degreeMap.get(e.source) ?? 0) + 1);
+      degreeMap.set(e.target, (degreeMap.get(e.target) ?? 0) + 1);
+    }
+    return {
+      nodes: graph.nodes.map((n): GNode => {
+        const layer = detectLayer(n.path, n.extension, n.name);
+        return {
+          id: n.id,
+          name: n.name,
+          layer,
+          riskLevel: n.riskLevel,
+          riskScore: n.riskScore,
+          language: n.language,
+          lines: n.lines,
+          val: Math.max(1, Math.min(8, n.lines / 100)),
+          degree: degreeMap.get(n.id) ?? 0,
+          color: LAYERS[layer].color,
+        };
+      }),
+      links: graph.edges.map((e): GLink => ({
+        source: e.source, target: e.target, weight: e.weight,
+      })),
+    };
+  }, [graph]);
 
   // Apply radial force after graph initialises → creates the concentric sphere shells
   useEffect(() => {
@@ -168,14 +177,19 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     const mesh = new THREE.Mesh(geo, mat);
     group.add(mesh);
 
-    // Risk glow ring for dangerous nodes
-    if (n.riskLevel !== 'safe') {
-      const ringGeo = new THREE.TorusGeometry(radius * 1.5, radius * 0.1, 6, 20);
-      const ringColor = n.riskLevel === 'critical' ? 0xdc2626 : n.riskLevel === 'risk' ? 0xf97316 : 0xf59e0b;
-      const ringMat = new THREE.MeshBasicMaterial({ color: ringColor, transparent: true, opacity: 0.6 });
+    // Risk indicator — only critical gets the Saturn ring; risk gets a corona glow
+    if (n.riskLevel === 'critical') {
+      // Saturn-style ring (reserved for most dangerous)
+      const ringGeo = new THREE.TorusGeometry(radius * 1.8, radius * 0.12, 6, 24);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xdc2626, transparent: true, opacity: 0.85 });
       const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.rotation.x = Math.PI / 2;
+      ring.rotation.x = Math.PI / 3;
       group.add(ring);
+    } else if (n.riskLevel === 'risk') {
+      // Corona glow sphere (orange aura, no ring)
+      const coronaGeo = new THREE.SphereGeometry(radius * 1.5, 8, 6);
+      const coronaMat = new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.18, side: THREE.BackSide });
+      group.add(new THREE.Mesh(coronaGeo, coronaMat));
     }
 
     // Selection ring
@@ -193,20 +207,26 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     return group;
   }, [selectedNode, colorMode]);
 
-  // Link color
+  // Link color — cross-layer = bright, same-layer = subtle
   const linkColor = useCallback((link: object) => {
     const l = link as GLink & { source: GNode; target: GNode };
     const src = typeof l.source === 'object' ? l.source : null;
     const tgt = typeof l.target === 'object' ? l.target : null;
-    if (!src || !tgt) return 'rgba(100,116,139,0.15)';
-    // Cross-layer links highlighted
-    if (src.layer !== tgt.layer) return 'rgba(148,163,184,0.35)';
-    return 'rgba(100,116,139,0.15)';
+    if (!src || !tgt) return 'rgba(148,163,184,0.4)';
+    if (src.layer !== tgt.layer) return 'rgba(200,220,255,0.65)'; // cross-layer: bright blue-white
+    return 'rgba(148,163,184,0.35)';                              // same-layer: subtle grey
   }, []);
 
+  // Link width — based on average degree of connected nodes
+  // Hub-to-hub connections are thick; leaf-to-leaf are thin
   const linkWidth = useCallback((link: object) => {
-    const l = link as GLink;
-    return Math.min(3, Math.max(0.3, l.weight * 0.5));
+    const l = link as GLink & { source: GNode; target: GNode };
+    const src = typeof l.source === 'object' ? l.source : null;
+    const tgt = typeof l.target === 'object' ? l.target : null;
+    if (!src || !tgt) return 2;
+    const avgDegree = (src.degree + tgt.degree) / 2;
+    // min 1.5, max 8, scales with how connected both endpoints are
+    return Math.min(8, Math.max(1.5, avgDegree * 0.7));
   }, []);
 
   return (
