@@ -296,7 +296,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
           // Remove layer radial force; install cluster pull force
           fgRef.current.d3Force('radial', null);
           fgRef.current.d3Force('cluster', (alpha: number) => {
-            for (const n of fgRef.current.graphData().nodes) {
+            for (const n of graphData.nodes as any[]) {
               const cid = compId.get(n.id as string) ?? 0;
               const center = centerMap[cid] ?? { x: 0, y: 0, z: 0 };
               n.vx += (center.x - n.x) * 0.07 * alpha;
