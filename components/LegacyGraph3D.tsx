@@ -419,13 +419,14 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         )}
       </div>
 
-      {/* Navigation hint + edge count debug */}
+      {/* Navigation hint + stats */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1">
         <div className="text-xs text-slate-600 bg-[#02020a]/80 px-3 py-1 rounded-full border border-[#1e293b]">
           ドラッグで回転 · スクロールでズーム · クリックで詳細
         </div>
-        <div className={`text-[10px] px-2 py-0.5 rounded-full border ${graphData.links.length > 0 ? 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10' : 'text-slate-600 border-slate-700/30'}`}>
+        <div className={`text-[10px] px-2 py-0.5 rounded-full border ${graphData.links.length > 0 ? 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10' : 'text-amber-500 border-amber-500/30 bg-amber-500/10'}`}>
           {graphData.nodes.length} ノード · {graphData.links.length} 接続
+          {graphData.links.length === 0 && ' ⚠ 接続なし（インポート解析対象外の言語の可能性）'}
         </div>
       </div>
 
@@ -442,14 +443,19 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         linkDirectionalParticles={(link) => {
           const l = link as GLink & { source: GNode; target: GNode };
           const src = typeof l.source === 'object' ? l.source : null;
-          if (!src) return 0;
-          return src.riskLevel === 'critical' ? 3 : src.riskLevel === 'risk' ? 1 : 0;
+          if (!src) return 1; // ALL links get at least 1 particle — visible regardless of opacity
+          return src.riskLevel === 'critical' ? 4 : src.riskLevel === 'risk' ? 2 : 1;
         }}
-        linkDirectionalParticleSpeed={0.004}
+        linkDirectionalParticleSpeed={0.007}
+        linkDirectionalParticleWidth={3}
         linkDirectionalParticleColor={(link) => {
           const l = link as GLink & { source: GNode };
           const src = typeof l.source === 'object' ? l.source : null;
-          return src?.riskLevel === 'critical' ? '#dc2626' : '#f97316';
+          if (!src) return '#818cf8';
+          if (src.riskLevel === 'critical') return '#dc2626';
+          if (src.riskLevel === 'risk') return '#f97316';
+          // Normal links: use layer color
+          return LAYERS[src.layer].color;
         }}
         linkOpacity={1}
       backgroundColor="#02020a"
