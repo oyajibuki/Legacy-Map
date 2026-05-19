@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import FileScanner from '@/components/FileScanner';
 import NodeDetail from '@/components/NodeDetail';
 import ReportPanel from '@/components/ReportPanel';
+import ProjectInsightCard from '@/components/ProjectInsightCard';
 import { DependencyGraph, FileNode, UploadedFile } from '@/lib/types';
+import { detectKnownProject, ProjectInsight } from '@/lib/known-projects';
 import { Map as MapIcon, RefreshCw, AlertTriangle, Shield, TrendingUp, Files, ChevronRight, GitBranch } from 'lucide-react';
 
 const LegacyGraph3D = dynamic(() => import('@/components/LegacyGraph3D'), { ssr: false });
@@ -20,6 +22,7 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState('');
   const [leftTab, setLeftTab] = useState<'overview' | 'structure'>('overview');
+  const [insight, setInsight] = useState<ProjectInsight | null>(null);
 
   async function handleFilesReady(files: UploadedFile[]) {
     setUploadedFiles(files);
@@ -37,6 +40,9 @@ export default function Home() {
       const data: DependencyGraph = await res.json();
       setGraph(data);
       setStep('viewing');
+      // Auto-detect known project and show insight card
+      const detected = detectKnownProject(data.nodes.map(n => n.path));
+      setInsight(detected);
     } catch (err) {
       setError(`解析エラー: ${err}`);
     } finally {
@@ -50,6 +56,7 @@ export default function Home() {
     setUploadedFiles([]);
     setSelectedNode(null);
     setError('');
+    setInsight(null);
   }
 
   return (
@@ -146,8 +153,12 @@ export default function Home() {
 
           {/* Main graph + report */}
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 relative">
               <LegacyGraph3D graph={graph} selectedNode={selectedNode} onSelectNode={setSelectedNode} />
+              {/* Known project insight card */}
+              {insight && (
+                <ProjectInsightCard insight={insight} onDismiss={() => setInsight(null)} />
+              )}
             </div>
             <ReportPanel graph={graph} uploadedFiles={uploadedFiles} />
           </div>
