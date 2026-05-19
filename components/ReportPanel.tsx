@@ -207,15 +207,18 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
-          {!apiKey && (
-            <button
-              onClick={() => setShowApiInput(true)}
-              className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 px-2 py-1 rounded-md bg-amber-400/10 border border-amber-400/20"
-            >
-              <Key className="w-3 h-3" />
-              APIキー設定
-            </button>
-          )}
+          <button
+            onClick={() => setShowApiInput(true)}
+            className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border transition-colors ${
+              apiKey
+                ? 'text-slate-400 hover:text-slate-200 border-slate-700/50 bg-slate-700/10 hover:bg-slate-700/30'
+                : 'text-amber-400 hover:text-amber-300 bg-amber-400/10 border-amber-400/20'
+            }`}
+            title={apiKey ? 'APIキーを変更' : 'APIキーを設定'}
+          >
+            <Key className="w-3 h-3" />
+            {apiKey ? 'APIキー変更' : 'APIキー設定'}
+          </button>
           <button
             onClick={() => runAnalysis(activeTab)}
             disabled={isLoading}

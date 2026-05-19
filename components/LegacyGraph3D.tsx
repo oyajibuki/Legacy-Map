@@ -438,7 +438,9 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         nodeLabel=""
         linkColor={linkColor}
         linkWidth={linkWidth}
-        linkDirectionalArrowLength={2}
+        linkOpacity={1}
+        linkCurvature={0.2}
+        linkDirectionalArrowLength={3}
         linkDirectionalArrowRelPos={1}
         linkDirectionalParticles={(link) => {
           const l = link as GLink & { source: GNode; target: GNode };
@@ -479,6 +481,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         enableNodeDrag={false}
         d3AlphaDecay={0.015}
         d3VelocityDecay={0.25}
+        cameraPosition={{ x: 0, y: 0, z: 380 }}
       />
     </div>
   );
