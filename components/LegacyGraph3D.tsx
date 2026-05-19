@@ -190,6 +190,16 @@ function fibSpherePos(i: number, total: number, radius: number) {
   };
 }
 
+// ── Stable constants (outside component to avoid recreation) ──────────────
+const LAYER_LINK_COLORS: Record<LayerKey, string> = {
+  ui:       'rgba(129,140,248,0.55)',  // indigo
+  api:      'rgba(52,211,153,0.55)',   // green
+  service:  'rgba(245,158,11,0.55)',   // amber
+  platform: 'rgba(34,211,238,0.55)',   // cyan
+  core:     'rgba(244,114,182,0.65)',  // pink
+};
+const CAMERA_INITIAL = { x: 0, y: 0, z: 450 };
+
 // ── Build adjacency + connected components from links ─────
 function buildComponents(nodes: GNode[], links: GLink[]) {
   const adj = new Map<string, Set<string>>();
@@ -254,7 +264,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
           riskScore: n.riskScore,
           language: n.language,
           lines: n.lines,
-          val: Math.max(1, Math.min(8, n.lines / 100)),
+          val: Math.max(1, Math.min(8, (n.lines > 0 ? n.lines : 0) / 100)),
           degree: degreeMap.get(n.id) ?? 0,
           color: LAYERS[layer].color,
           x: pos.x, y: pos.y, z: pos.z,
@@ -360,7 +370,9 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     const isCore = n.layer === 'core';
 
     // Core nodes are bigger and use a special geometry to stand out
-    const baseRadius = Math.max(2.5, n.val * 2);
+    // Guard against NaN: Math.max(x, NaN) === NaN in JS, so we clamp first
+    const safeVal = Number.isFinite(n.val) ? n.val : 1;
+    const baseRadius = Math.max(2.5, safeVal * 2);
     const radius = isCore ? baseRadius * 1.8 : baseRadius;
 
     const group = new THREE.Group();
@@ -432,14 +444,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     return group;
   }, [selectedNode, colorMode]);
 
-  // Same-layer link colors — use each layer's own color at readable opacity
-  const LAYER_LINK_COLORS: Record<LayerKey, string> = {
-    ui:       'rgba(129,140,248,0.55)',  // indigo
-    api:      'rgba(52,211,153,0.55)',   // green
-    service:  'rgba(245,158,11,0.55)',   // amber
-    platform: 'rgba(34,211,238,0.55)',   // cyan
-    core:     'rgba(244,114,182,0.65)',  // pink (brighter — core links matter)
-  };
+  // Same-layer link colors — defined outside render to be stable refs
 
   // Link color — cross-layer = white-blue, same-layer = layer's own color
   const linkColor = useCallback((link: object) => {
@@ -459,9 +464,47 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     const tgt = typeof l.target === 'object' ? l.target : null;
     if (!src || !tgt) return 2;
     const avgDegree = (src.degree + tgt.degree) / 2;
-    // min 2, max 10, scales with connectivity
     return Math.min(10, Math.max(2, avgDegree * 1.2));
   }, []);
+
+  // ── Stable callbacks (useCallback prevents infinite re-render loop) ───────
+  // linkDirectionalParticles/Color: inline functions recreate every render →
+  // ForceGraph3D sees new props → re-renders → calls onNodeHover → setTooltip → loop
+  const linkParticleCount = useCallback((link: object) => {
+    const l = link as GLink & { source: GNode };
+    const src = typeof l.source === 'object' ? l.source : null;
+    if (!src) return 1;
+    return src.riskLevel === 'critical' ? 4 : src.riskLevel === 'risk' ? 2 : 1;
+  }, []);
+
+  const linkParticleColor = useCallback((link: object) => {
+    const l = link as GLink & { source: GNode };
+    const src = typeof l.source === 'object' ? l.source : null;
+    if (!src) return '#818cf8';
+    if (src.riskLevel === 'critical') return '#dc2626';
+    if (src.riskLevel === 'risk') return '#f97316';
+    return LAYERS[src.layer]?.color ?? '#818cf8';
+  }, []);
+
+  const handleNodeHover = useCallback((node: object | null) => {
+    if (node) {
+      setTooltip({ x: 200, y: 80, node: node as GNode });
+    } else {
+      setTooltip(null);
+    }
+  }, []); // setTooltip is stable from useState — no deps needed
+
+  const handleNodeClick = useCallback((node: object) => {
+    const n = node as GNode;
+    const fileNode = graph.nodes.find(fn => fn.id === n.id) ?? null;
+    onSelectNode(selectedNode?.id === n.id ? null : fileNode);
+    setTooltip(null);
+  }, [graph.nodes, onSelectNode, selectedNode]);
+
+  const handleBackgroundClick = useCallback(() => {
+    onSelectNode(null);
+    setTooltip(null);
+  }, [onSelectNode]);
 
   return (
     <div className="w-full h-full relative bg-[#02020a] overflow-hidden">
@@ -588,47 +631,21 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         linkCurvature={0.2}
         linkDirectionalArrowLength={3}
         linkDirectionalArrowRelPos={1}
-        linkDirectionalParticles={(link) => {
-          const l = link as GLink & { source: GNode; target: GNode };
-          const src = typeof l.source === 'object' ? l.source : null;
-          if (!src) return 1; // ALL links get at least 1 particle — visible regardless of opacity
-          return src.riskLevel === 'critical' ? 4 : src.riskLevel === 'risk' ? 2 : 1;
-        }}
+        linkDirectionalParticles={linkParticleCount}
         linkDirectionalParticleSpeed={0.007}
         linkDirectionalParticleWidth={3}
-        linkDirectionalParticleColor={(link) => {
-          const l = link as GLink & { source: GNode };
-          const src = typeof l.source === 'object' ? l.source : null;
-          if (!src) return '#818cf8';
-          if (src.riskLevel === 'critical') return '#dc2626';
-          if (src.riskLevel === 'risk') return '#f97316';
-          // Normal links: use layer color
-          return LAYERS[src.layer].color;
-        }}
-      backgroundColor="#02020a"
-        onNodeClick={(node) => {
-          const n = node as GNode;
-          const fileNode = graph.nodes.find(fn => fn.id === n.id) ?? null;
-          onSelectNode(selectedNode?.id === n.id ? null : fileNode);
-          setTooltip(null);
-        }}
-        onNodeHover={(node, prevNode) => {
-          if (node) {
-            const n = node as GNode;
-            // Use canvas center as fallback since we don't have mouse coords in 3D easily
-            setTooltip({ x: 200, y: 80, node: n });
-          } else {
-            setTooltip(null);
-          }
-        }}
-        onBackgroundClick={() => { onSelectNode(null); setTooltip(null); }}
+        linkDirectionalParticleColor={linkParticleColor}
+        backgroundColor="#02020a"
+        onNodeClick={handleNodeClick}
+        onNodeHover={handleNodeHover}
+        onBackgroundClick={handleBackgroundClick}
         showNavInfo={false}
         enableNodeDrag={false}
         warmupTicks={120}
         cooldownTicks={200}
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.3}
-        cameraPosition={{ x: 0, y: 0, z: 380 }}
+        cameraPosition={CAMERA_INITIAL}
       />
     </div>
   );
