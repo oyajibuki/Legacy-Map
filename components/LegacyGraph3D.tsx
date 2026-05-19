@@ -324,15 +324,15 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
   }, []);
 
   // Link width — based on average degree of connected nodes
-  // Hub-to-hub connections are thick; leaf-to-leaf are thin
+  // Hub-to-hub connections are thick; leaf-to-leaf are still visible (min 2)
   const linkWidth = useCallback((link: object) => {
     const l = link as GLink & { source: GNode; target: GNode };
     const src = typeof l.source === 'object' ? l.source : null;
     const tgt = typeof l.target === 'object' ? l.target : null;
     if (!src || !tgt) return 2;
     const avgDegree = (src.degree + tgt.degree) / 2;
-    // min 1.5, max 8, scales with how connected both endpoints are
-    return Math.min(8, Math.max(1.5, avgDegree * 0.7));
+    // min 2, max 10, scales with connectivity
+    return Math.min(10, Math.max(2, avgDegree * 1.2));
   }, []);
 
   return (
@@ -419,9 +419,14 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         )}
       </div>
 
-      {/* Navigation hint */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-xs text-slate-600 bg-[#02020a]/80 px-3 py-1 rounded-full border border-[#1e293b]">
-        ドラッグで回転 · スクロールでズーム · クリックで詳細
+      {/* Navigation hint + edge count debug */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1">
+        <div className="text-xs text-slate-600 bg-[#02020a]/80 px-3 py-1 rounded-full border border-[#1e293b]">
+          ドラッグで回転 · スクロールでズーム · クリックで詳細
+        </div>
+        <div className={`text-[10px] px-2 py-0.5 rounded-full border ${graphData.links.length > 0 ? 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10' : 'text-slate-600 border-slate-700/30'}`}>
+          {graphData.nodes.length} ノード · {graphData.links.length} 接続
+        </div>
       </div>
 
       <ForceGraph3D
@@ -446,7 +451,8 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
           const src = typeof l.source === 'object' ? l.source : null;
           return src?.riskLevel === 'critical' ? '#dc2626' : '#f97316';
         }}
-        backgroundColor="#02020a"
+        linkOpacity={1}
+      backgroundColor="#02020a"
         onNodeClick={(node) => {
           const n = node as GNode;
           const fileNode = graph.nodes.find(fn => fn.id === n.id) ?? null;
