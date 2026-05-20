@@ -506,6 +506,12 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
     setTooltip(null);
   }, [onSelectNode]);
 
+  // Auto-center after simulation settles
+  const handleEngineStop = useCallback(() => {
+    if (!fgRef.current) return;
+    try { fgRef.current.zoomToFit(400, 60); } catch { /* ignore */ }
+  }, []);
+
   return (
     <div className="w-full h-full relative bg-[#02020a] overflow-hidden">
       {/* Tooltip */}
@@ -639,6 +645,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
         onBackgroundClick={handleBackgroundClick}
+        onEngineStop={handleEngineStop}
         showNavInfo={false}
         enableNodeDrag={false}
         warmupTicks={120}
