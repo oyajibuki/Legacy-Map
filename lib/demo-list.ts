@@ -1,0 +1,264 @@
+import { ArchType } from './known-projects';
+
+export type DemoCategory =
+  | 'すべて'
+  | 'FPS伝説'
+  | '天才コード'
+  | '混沌の伝説'
+  | '設計革命'
+  | 'レガシー';
+
+export interface DemoProject {
+  id: string;          // folder name = JSON file name
+  name: string;
+  year: number;
+  lang: string;
+  creator: string;
+  categories: DemoCategory[];
+  archType: ArchType;
+  tagline: string;     // one-line hook shown in timeline
+  description: string; // shown in sidebar when selected
+  color: string;       // accent color
+}
+
+export const CATEGORIES: DemoCategory[] = [
+  'すべて',
+  'FPS伝説',
+  '天才コード',
+  '混沌の伝説',
+  '設計革命',
+  'レガシー',
+];
+
+export const CATEGORY_ICONS: Record<DemoCategory, string> = {
+  'すべて':   '🌐',
+  'FPS伝説':  '🎮',
+  '天才コード': '💎',
+  '混沌の伝説': '🌀',
+  '設計革命':  '🚀',
+  'レガシー':  '🏛️',
+};
+
+export const DEMOS: DemoProject[] = [
+  {
+    id: '1959_COBOL',
+    name: 'COBOL（サンプル）',
+    year: 1959,
+    lang: 'COBOL',
+    creator: 'Grace Hopper / IBM',
+    categories: ['レガシー'],
+    archType: 'clean-minimal',
+    tagline: '65年現役、最古の業務言語',
+    description: '1959年に誕生し、今も世界の金融・行政システムの中核を担う。グローバル変数なし、副作用を嫌う設計思想は現代でも通用する。',
+    color: '#94a3b8',
+  },
+  {
+    id: '1959_COBOL_mapa',
+    name: 'COBOL（大規模）',
+    year: 1959,
+    lang: 'COBOL',
+    creator: 'コミュニティ',
+    categories: ['レガシー'],
+    archType: 'chaotic',
+    tagline: '355ファイルの巨大COBOLシステム',
+    description: '実際の業務システムに近い大規模COBOLコード。ファイル数は多いが接続が疎なのは「プログラム単位でモジュール化」するCOBOLの哲学が理由。',
+    color: '#94a3b8',
+  },
+  {
+    id: '1987_NetHack',
+    name: 'NetHack',
+    year: 1987,
+    lang: 'C',
+    creator: 'NetHack DevTeam',
+    categories: ['混沌の伝説'],
+    archType: 'chaotic',
+    tagline: '37年間、誰も全体を把握していない',
+    description: '1987年から何十人もが少しずつ書き続けた。変数名は1文字、グローバル変数が至る所に。でも37年間動き続けている「動けばいい」精神の到達点。',
+    color: '#f97316',
+  },
+  {
+    id: '1992_Wolf3D',
+    name: 'Wolfenstein 3D',
+    year: 1992,
+    lang: 'C',
+    creator: 'John Carmack / id Software',
+    categories: ['FPS伝説', '天才コード'],
+    archType: 'genius-dense',
+    tagline: 'DOOMを生んだ26ファイルの原点',
+    description: 'レイキャスティングという「なんちゃって3D」で世界を驚かせた。翌年Carmackはこれを捨ててDOOMを作る。天才の自己否定。',
+    color: '#f472b6',
+  },
+  {
+    id: '1993_ChocolateDoom',
+    name: 'Chocolate Doom',
+    year: 1993,
+    lang: 'C',
+    creator: 'Simon Howard（現代移植）',
+    categories: ['FPS伝説'],
+    archType: 'evolved',
+    tagline: '天才コードを現代人が3倍のファイルで解読した',
+    description: '元DOOMを忠実に現代OSへ移植。155ファイルが500ファイルに膨らんだのはプラットフォーム抽象化という「現代の重力」の証明。',
+    color: '#818cf8',
+  },
+  {
+    id: '1993_DOOM',
+    name: 'DOOM',
+    year: 1993,
+    lang: 'C',
+    creator: 'John Carmack / id Software',
+    categories: ['FPS伝説', '天才コード'],
+    archType: 'genius-dense',
+    tagline: '155ファイルで地獄を作った天才',
+    description: 'MS-DOS専用として設計。マルチプラットフォーム対応ゼロ。全コードがゲームのためだけに存在する「制約の美」。接続密度3.4本/ファイルはcURLの5倍。',
+    color: '#f472b6',
+  },
+  {
+    id: '1993_Ruby_v049',
+    name: 'Ruby v0.49',
+    year: 1993,
+    lang: 'C',
+    creator: 'まつもとゆきひろ（Matz）',
+    categories: ['天才コード'],
+    archType: 'genius-dense',
+    tagline: '日本発・世界標準言語の最初の形',
+    description: '100ファイル以下でオブジェクト指向スクリプト言語を実現。eval.cという心臓部1本に全インタープリタが凝縮。DOOMと同じ「神ハブ」構造。',
+    color: '#f472b6',
+  },
+  {
+    id: '1996_Quake',
+    name: 'Quake',
+    year: 1996,
+    lang: 'C',
+    creator: 'John Carmack / id Software',
+    categories: ['FPS伝説', '天才コード'],
+    archType: 'genius-dense',
+    tagline: '世界初の真3Dエンジン、DOOMから3年',
+    description: 'BSPツリー・ポータルレンダリング・GL対応。DOOMの密な一枚岩からレンダラー分離が始まった。後にHalf-Life・CS・CoD系譜の祖先となるコード。',
+    color: '#f472b6',
+  },
+  {
+    id: '1996_Ruby_v100',
+    name: 'Ruby 1.0',
+    year: 1996,
+    lang: 'C',
+    creator: 'まつもとゆきひろ（Matz）',
+    categories: ['天才コード'],
+    archType: 'genius-dense',
+    tagline: '1996年12月25日、クリスマスに生まれた',
+    description: 'Ruby 1.0はMatzが意図的にクリスマスを選んでリリース。日本発で世界標準になった唯一のプログラミング言語の正式版。',
+    color: '#f472b6',
+  },
+  {
+    id: '1996_ZDoom',
+    name: 'ZDoom',
+    year: 1996,
+    lang: 'C++',
+    creator: 'Randy Heit（コミュニティ）',
+    categories: ['FPS伝説'],
+    archType: 'evolved',
+    tagline: 'DOOMをC++で書き直したらこうなった',
+    description: 'DOOMエンジンにC++クラスを導入した最初の大型ポート。600ファイルに膨張。「C++は整理するか、爆発するか」を示す実例。',
+    color: '#818cf8',
+  },
+  {
+    id: '1997_Quake2',
+    name: 'Quake II',
+    year: 1997,
+    lang: 'C',
+    creator: 'John Carmack / id Software',
+    categories: ['FPS伝説'],
+    archType: 'evolved',
+    tagline: 'サーバー/クライアント分離、設計思想の転換点',
+    description: 'game.dllとエンジンを分離しModコミュニティを解放。DOOMの一枚岩から脱却が本格化。後に100本以上のゲームに使われる。',
+    color: '#818cf8',
+  },
+  {
+    id: '1999_Quake3',
+    name: 'Quake III Arena',
+    year: 1999,
+    lang: 'C',
+    creator: 'John Carmack / id Software',
+    categories: ['FPS伝説'],
+    archType: 'evolved',
+    tagline: '6年でDOOMから完全に別の生き物へ',
+    description: 'シェーダーシステム導入でアーティストがコードなしに表現できる時代へ。vm/（仮想マシン）でゲームロジックをサンドボックス化。2005年にGPLで公開。',
+    color: '#818cf8',
+  },
+  {
+    id: '2004_WordPress',
+    name: 'WordPress',
+    year: 2004,
+    lang: 'PHP',
+    creator: 'Matt Mullenweg',
+    categories: ['混沌の伝説'],
+    archType: 'chaotic',
+    tagline: '世界の43%のサイトを動かすPHPスパゲッティ',
+    description: 'グローバル変数とフック地獄。「WordPressのコードは最悪だ」という批評は20年続いている。でも世界の43%のWebサイトはこれで動いている。',
+    color: '#f97316',
+  },
+  {
+    id: '2009_Redis',
+    name: 'Redis',
+    year: 2009,
+    lang: 'C',
+    creator: 'Salvatore Sanfilippo（antirez）',
+    categories: ['天才コード'],
+    archType: 'clean-minimal',
+    tagline: 'イタリア人1人が書いた「世界で最も美しいCコード」',
+    description: 'src/以下に全機能が凝縮。10万行以下で世界のインフラを支える。変数名が意味を持ち、関数が短く、コメントが哲学的。',
+    color: '#34d399',
+  },
+  {
+    id: '2013_React',
+    name: 'React',
+    year: 2013,
+    lang: 'JavaScript',
+    creator: 'Jordan Walke / Meta',
+    categories: ['設計革命'],
+    archType: 'revolutionary',
+    tagline: 'UIをコンポーネントに分解した革命',
+    description: '2013年の最初期バージョン。発表時「なぜHTMLをJSに書くんだ？」と猛批判。10年後、それが世界標準になった。',
+    color: '#fbbf24',
+  },
+  {
+    id: '2014_Vue',
+    name: 'Vue.js',
+    year: 2014,
+    lang: 'JavaScript',
+    creator: 'Evan You（個人）',
+    categories: ['設計革命'],
+    archType: 'clean-minimal',
+    tagline: 'Googleを辞めた1人がReactに並んだ',
+    description: 'Reactを参考にAngularの良い部分を混ぜ、1人で設計。企業バックなし・1人・でもReactと並ぶシェアへ。個人OSSが企業フレームワークと戦えることを証明。',
+    color: '#34d399',
+  },
+  {
+    id: '2019_Svelte',
+    name: 'Svelte',
+    year: 2019,
+    lang: 'TypeScript',
+    creator: 'Rich Harris',
+    categories: ['設計革命'],
+    archType: 'revolutionary',
+    tagline: 'ランタイムを捨てたフレームワーク',
+    description: '「フレームワークはコンパイル時に消えるべき」という思想。仮想DOMを持たない。コードは少なく、速く、美しい。',
+    color: '#fbbf24',
+  },
+  {
+    id: '2024_cURL',
+    name: 'cURL',
+    year: 1997,
+    lang: 'C',
+    creator: 'Daniel Stenberg（27年間ほぼ1人）',
+    categories: ['天才コード'],
+    archType: 'clean-minimal',
+    tagline: '27年間1人が作り続ける、世界で最も使われるC',
+    description: '1997年から27年。250以上のプロトコル対応。世界のほぼ全てのサーバーとスマートフォンでこのコードが動いている。',
+    color: '#34d399',
+  },
+];
+
+export function getDemosByCategory(category: DemoCategory): DemoProject[] {
+  if (category === 'すべて') return DEMOS;
+  return DEMOS.filter(d => d.categories.includes(category));
+}
