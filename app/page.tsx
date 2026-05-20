@@ -202,7 +202,15 @@ export default function Home() {
           {mode === 'upload' ? (
             /* Upload mode: show file scanner in sidebar */
             <div className="flex flex-col h-full bg-[#0a0a0f] border-r border-[#1e293b] overflow-hidden">
-              <div className="px-4 pt-4 pb-3 border-b border-[#1e293b] flex-shrink-0">
+              {/* Back button */}
+              <button
+                onClick={() => { setMode('demo'); setError(''); }}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#0f0f1a] border-b border-[#1e293b] transition-colors text-left w-full flex-shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                ホームに戻る
+              </button>
+              <div className="px-4 pt-3 pb-3 border-b border-[#1e293b] flex-shrink-0">
                 <p className="text-sm font-semibold text-slate-200 mb-0.5">自分のコードを解析</p>
                 <p className="text-[11px] text-slate-500">フォルダをドロップするかクリックして選択</p>
               </div>
