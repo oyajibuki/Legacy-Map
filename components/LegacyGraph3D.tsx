@@ -231,10 +231,27 @@ function buildComponents(nodes: GNode[], links: GLink[]) {
 // ── Component ──────────────────────────────────────────────
 export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Props) {
   const fgRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; node: GNode } | null>(null);
   const [showLayers, setShowLayers] = useState(true);
   const [colorMode, setColorMode] = useState<'risk' | 'layer'>('layer');
   const [layoutMode, setLayoutMode] = useState<'layer' | 'cluster'>('layer');
+
+  // Track container size with ResizeObserver → pass to ForceGraph3D so its
+  // canvas always matches the flex-layout area (prevents right-shift bug)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const e = entries[0];
+      if (e) setDims({ w: Math.floor(e.contentRect.width), h: Math.floor(e.contentRect.height) });
+    });
+    ro.observe(el);
+    // Initial read (in case ResizeObserver fires late)
+    setDims({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
 
   // Memoized data — only rebuilds when graph changes
   const graphData = useMemo(() => {
@@ -513,7 +530,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
   }, []);
 
   return (
-    <div className="w-full h-full relative bg-[#02020a] overflow-hidden">
+    <div ref={containerRef} className="w-full h-full relative bg-[#02020a] overflow-hidden">
       {/* Tooltip */}
       {tooltip && (
         <div className="absolute z-20 pointer-events-none" style={{ left: tooltip.x + 14, top: tooltip.y - 14 }}>
@@ -647,6 +664,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         onBackgroundClick={handleBackgroundClick}
         onEngineStop={handleEngineStop}
         showNavInfo={false}
+        {...(dims ? { width: dims.w, height: dims.h } : {})}
         enableNodeDrag={false}
         warmupTicks={120}
         cooldownTicks={200}
