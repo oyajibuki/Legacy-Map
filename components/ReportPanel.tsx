@@ -7,6 +7,7 @@ import { Bot, ChevronUp, ChevronDown, Loader2, Copy, Check, Key, X } from 'lucid
 interface Props {
   graph: DependencyGraph;
   uploadedFiles: UploadedFile[];
+  demoId?: string; // when set, try to load pre-computed report from /public/reports/
 }
 
 function renderMarkdown(text: string): string {
@@ -33,11 +34,12 @@ function renderMarkdown(text: string): string {
     .replace(/<p><\/p>/g, '');
 }
 
-export default function ReportPanel({ graph, uploadedFiles }: Props) {
+export default function ReportPanel({ graph, uploadedFiles, demoId }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'operation' | 'migration'>('operation');
   const [reports, setReports] = useState<{ operation: string; migration: string }>({ operation: '', migration: '' });
   const [loading, setLoading] = useState<{ operation: boolean; migration: boolean }>({ operation: false, migration: false });
+  const [preComputed, setPreComputed] = useState<{ operation: boolean; migration: boolean }>({ operation: false, migration: false });
   const [apiKey, setApiKey] = useState('');
   const [showApiInput, setShowApiInput] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -47,6 +49,31 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
     const saved = localStorage.getItem('vibemap_gemini_api_key');
     if (saved) setApiKey(saved);
   }, []);
+
+  // Auto-load pre-computed reports when demoId changes
+  useEffect(() => {
+    if (!demoId) {
+      setPreComputed({ operation: false, migration: false });
+      setReports({ operation: '', migration: '' });
+      return;
+    }
+    setReports({ operation: '', migration: '' });
+    setPreComputed({ operation: false, migration: false });
+
+    const load = async (mode: 'operation' | 'migration') => {
+      try {
+        const res = await fetch(`/reports/${demoId}_${mode}.md`);
+        if (!res.ok) return;
+        const text = await res.text();
+        setReports(prev => ({ ...prev, [mode]: text }));
+        setPreComputed(prev => ({ ...prev, [mode]: true }));
+      } catch {
+        // no pre-computed report — that's OK
+      }
+    };
+    load('operation');
+    load('migration');
+  }, [demoId]);
 
   function saveApiKey(key: string) {
     setApiKey(key);
@@ -207,29 +234,45 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowApiInput(true)}
-            className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border transition-colors ${
-              apiKey
-                ? 'text-slate-400 hover:text-slate-200 border-slate-700/50 bg-slate-700/10 hover:bg-slate-700/30'
-                : 'text-amber-400 hover:text-amber-300 bg-amber-400/10 border-amber-400/20'
-            }`}
-            title={apiKey ? 'APIキーを変更' : 'APIキーを設定'}
-          >
-            <Key className="w-3 h-3" />
-            {apiKey ? 'APIキー変更' : 'APIキー設定'}
-          </button>
-          <button
-            onClick={() => runAnalysis(activeTab)}
-            disabled={isLoading}
-            className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors"
-          >
-            {isLoading ? (
-              <><Loader2 className="w-3 h-3 animate-spin" />生成中...</>
+          {/* Demo mode: show pre-computed badge or "not generated yet" hint */}
+          {demoId ? (
+            preComputed[activeTab] ? (
+              <span className="flex items-center gap-1 text-[10px] text-green-400 border border-green-500/30 bg-green-500/8 px-2 py-0.5 rounded-md">
+                ✓ 事前生成済み
+              </span>
             ) : (
-              <><Bot className="w-3 h-3" />{activeTab === 'operation' ? '運用分析' : '移行分析'}</>
-            )}
-          </button>
+              <span className="text-[10px] text-slate-600">
+                (APIキーで再生成可)
+              </span>
+            )
+          ) : (
+            /* Upload mode: show API key button + generate button */
+            <>
+              <button
+                onClick={() => setShowApiInput(true)}
+                className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border transition-colors ${
+                  apiKey
+                    ? 'text-slate-400 hover:text-slate-200 border-slate-700/50 bg-slate-700/10 hover:bg-slate-700/30'
+                    : 'text-amber-400 hover:text-amber-300 bg-amber-400/10 border-amber-400/20'
+                }`}
+                title={apiKey ? 'APIキーを変更' : 'APIキーを設定'}
+              >
+                <Key className="w-3 h-3" />
+                {apiKey ? 'APIキー変更' : 'APIキー設定'}
+              </button>
+              <button
+                onClick={() => runAnalysis(activeTab)}
+                disabled={isLoading}
+                className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors"
+              >
+                {isLoading ? (
+                  <><Loader2 className="w-3 h-3 animate-spin" />生成中...</>
+                ) : (
+                  <><Bot className="w-3 h-3" />{activeTab === 'operation' ? '運用分析' : '移行分析'}</>
+                )}
+              </button>
+            </>
+          )}
           {currentReport && (
             <button onClick={copyReport} className="p-1.5 hover:bg-[#1e1e2e] rounded-md text-slate-400 hover:text-slate-200 transition-colors">
               {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -259,12 +302,23 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
           {!isLoading && !currentReport && (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-8">
               <Bot className="w-10 h-10 text-slate-700" />
-              <p className="text-sm text-slate-500">
-                「{activeTab === 'operation' ? '運用分析' : '移行分析'}」ボタンでAIレポートを生成します
-              </p>
-              <p className="text-xs text-slate-600">
-                {graph.stats.totalFiles}ファイル・{graph.stats.avgRiskScore}点の平均リスクスコアを分析
-              </p>
+              {demoId ? (
+                <>
+                  <p className="text-sm text-slate-500">このデモのAIレポートはまだ生成されていません</p>
+                  <p className="text-xs text-slate-600 max-w-xs leading-relaxed">
+                    開発者が <code className="text-indigo-400">/api/generate-reports?key=...</code> を実行するとデモ全件のレポートが事前生成されます
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-500">
+                    「{activeTab === 'operation' ? '運用分析' : '移行分析'}」ボタンでAIレポートを生成します
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    {graph.stats.totalFiles}ファイル・{graph.stats.avgRiskScore}点の平均リスクスコアを分析
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>

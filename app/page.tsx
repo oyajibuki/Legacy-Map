@@ -165,7 +165,7 @@ export default function Home() {
       </div>
 
       {/* Report panel */}
-      <ReportPanel graph={graph} uploadedFiles={uploadedFiles} />
+      <ReportPanel graph={graph} uploadedFiles={uploadedFiles} demoId={mode === 'demo' ? demoId : undefined} />
     </div>
   ) : (
     <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
@@ -252,6 +252,79 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+// ── Risk factor Japanese translation ─────────────────────────
+const RISK_TYPE_JA: Record<string, string> = {
+  'God File':           'ゴッドファイル',
+  'Large File':         '大型ファイル',
+  'Big File':           '大きめファイル',
+  'High Coupling':      '高結合',
+  'Moderate Coupling':  '中程度の結合',
+  'No Tests':           'テストなし',
+  'CoffeeScript':       'CoffeeScript（放棄済み）',
+  'High Blast Radius':  '高波及リスク',
+  'Circular Dependency':'循環依存',
+  'EOL Dependency':     'EOL依存パッケージ',
+  'Legacy Pattern':     'レガシーパターン',
+};
+
+function translateRiskDesc(type: string, desc: string): string {
+  // Dynamic patterns with numbers
+  const m = (re: RegExp) => desc.match(re);
+  let hit: RegExpMatchArray | null;
+  if (type === 'God File' && (hit = m(/(\d+) lines/)))
+    return `${hit[1]}行 — 巨大すぎるファイル。責務を分割してください`;
+  if (type === 'Large File' && (hit = m(/(\d+) lines/)))
+    return `${hit[1]}行 — 大型ファイル。分割を検討してください`;
+  if (type === 'Big File' && (hit = m(/(\d+) lines/)))
+    return `${hit[1]}行 — やや大きいファイルです`;
+  if (type === 'High Coupling' && (hit = m(/(\d+)/)))
+    return `外部依存 ${hit[1]}件 — 結合度が高く変更が困難`;
+  if (type === 'Moderate Coupling' && (hit = m(/(\d+)/)))
+    return `外部依存 ${hit[1]}件 — やや結合度が高い`;
+  if (type === 'No Tests')
+    return 'テストファイルが見つかりません';
+  if (type === 'High Blast Radius' && (hit = m(/(\d+)/)))
+    return `${hit[1]}ファイルが依存 — 変更時の影響範囲が大きい`;
+  if (type === 'Circular Dependency' && (hit = m(/chain: (.+)/)))
+    return `循環依存チェーン: ${hit[1]}`;
+  // EOL / Legacy note translations (substring match)
+  const EOL_NOTES: [string, string][] = [
+    ['AngularJS (v1.x) EOL',       'AngularJS(v1.x)はサポート終了。Angular 2+へ移行してください'],
+    ['AngularJS EOL',              'AngularJSはサポート終了。Angular 2+へ移行してください'],
+    ['Bower deprecated',           'Bowerは2017年に非推奨。npm/yarnを使用してください'],
+    ['Grunt declining',            'Gruntは衰退中。Vite/esbuildへの移行を推奨'],
+    ['Gulp declining',             'Gulpは衰退中。Vite/esbuildの検討を推奨'],
+    ['CoffeeScript abandoned',     'CoffeeScriptは放棄済み。TypeScriptへ移行してください'],
+    ['"request" deprecated',       '"request"は非推奨。fetchまたはaxiosを使用してください'],
+    ['node-sass deprecated',       'node-sassは非推奨。"sass"(Dart Sass)を使用してください'],
+    ['TSLint deprecated',          'TSLintは2019年に非推奨。ESLintを使用してください'],
+    ['Backbone.js unmaintained',   'Backbone.jsはメンテナンス停止。React/Vueの検討を推奨'],
+    ['PhoneGap EOL',               'PhoneGapはサポート終了。Capacitor/React Nativeへ移行してください'],
+    ['Cordova declining',          'Cordovaは衰退中。Capacitorへの移行を推奨'],
+    ['jQuery is legacy',           'jQueryはレガシー。バニラJSまたはモダンFWを検討してください'],
+    ['Moment.js in legacy mode',   'Moment.jsはレガシー。date-fnsまたはdayjsを使用してください'],
+    ['Underscore.js maintained',   'Underscore.jsはlodashに取って代わられています'],
+    ['Webpack v4 EOL',             'Webpack v4はサポート終了。v5へアップグレードまたはViteへ移行してください'],
+    ['CRA deprecated',             'Create React Appは非推奨。ViteまたはNext.jsへ移行してください'],
+    ['Python 2 EOL',               'Python 2はサポート終了(2020年)。Python 3へ移行してください'],
+    ['Check Django version',       'Djangoのバージョンを確認してください(3.2未満はEOL)'],
+    ['flask-restplus unmaintained','flask-restplusはメンテナンス停止。flask-restxを使用してください'],
+    ['distribute merged',          'distributeは2013年にsetuptoolsに統合されました'],
+    ['PIL EOL 2011',               'PILは2011年にサポート終了。Pillowを使用してください'],
+    ['Check Rails version',        'Railsのバージョンを確認してください(EOL状況を要確認)'],
+    ['PHP 5.x EOL',                'PHP 5.xはサポート終了(2018年12月)。PHP 8+へアップグレードしてください'],
+    ['Log4j has critical CVE',     'Log4jに重大な脆弱性(CVE-2021-44228)。至急アップグレードしてください'],
+    ['Apache Struts has known CVE','Apache Strutsに既知のCVEあり。慎重に確認してください'],
+    ['Compass unmaintained',       'Compassは2017年以降メンテナンス停止'],
+    ['querystring module legacy',  'querystringモジュールはレガシー。URLSearchParamsを使用してください'],
+    ['Ember.js maintained',        'Ember.jsはメンテナンス中ですが市場シェアは低下中'],
+  ];
+  for (const [en, ja] of EOL_NOTES) {
+    if (desc.includes(en)) return ja;
+  }
+  return desc; // fallback
 }
 
 // ── Small stat chip ───────────────────────────────────────────
@@ -346,9 +419,13 @@ function DemoOverview({
                     <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${severityColor(rf.severity)}`}>
                       {severityLabel(rf.severity)}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium">{rf.type}</span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {RISK_TYPE_JA[rf.type] ?? rf.type}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">{rf.description}</p>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    {translateRiskDesc(rf.type, rf.description)}
+                  </p>
                 </div>
               ))}
             </div>
