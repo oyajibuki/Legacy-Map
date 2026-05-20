@@ -247,7 +247,7 @@ export default function ReportPanel({ graph, uploadedFiles }: Props) {
           {isLoading && !currentReport && (
             <div className="flex items-center gap-3 text-slate-500">
               <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
-              <span className="text-sm">Claude が分析しています...</span>
+              <span className="text-sm">Gemini が分析しています...</span>
             </div>
           )}
           {currentReport && (
