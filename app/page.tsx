@@ -139,7 +139,7 @@ export default function Home() {
         {/* Overview panel — shown in demo mode on the right side */}
         {mode === 'demo' && (
           <div className="w-64 flex-shrink-0 border-l border-[#1e293b] bg-[#0d0d14] flex flex-col overflow-y-auto">
-            <DemoOverview graph={graph} insight={insight} onSelectNode={setSelectedNode} />
+            <DemoOverview graph={graph} insight={insight} selectedNode={selectedNode} onSelectNode={setSelectedNode} />
           </div>
         )}
 
@@ -269,16 +269,131 @@ function StatChip({ icon, value, label, color }: { icon: React.ReactNode; value:
 function DemoOverview({
   graph,
   insight,
+  selectedNode,
   onSelectNode,
 }: {
   graph: DependencyGraph;
   insight: ProjectInsight | null;
+  selectedNode: FileNode | null;
   onSelectNode: (n: FileNode | null) => void;
 }) {
   const [showFunFact, setShowFunFact] = useState(false);
   const topRisk = [...graph.nodes].filter(n => n.riskLevel !== 'safe').sort((a,b)=>b.riskScore-a.riskScore).slice(0,5);
   const topHubs = [...graph.nodes].filter(n=>n.dependents.length>0).sort((a,b)=>b.dependents.length-a.dependents.length).slice(0,4);
   const style = insight ? ARCH_STYLES[insight.archType] : null;
+
+  // ── Node risk detail view ──
+  if (selectedNode) {
+    const rl = selectedNode.riskLevel;
+    const riskColor =
+      rl === 'critical' ? { text: 'text-red-400',    bg: 'bg-red-500/10',    border: 'border-red-500/30',    label: '緊急' } :
+      rl === 'risk'     ? { text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30', label: '危険' } :
+      rl === 'caution'  ? { text: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/30',  label: '注意' } :
+                          { text: 'text-slate-400',  bg: 'bg-slate-500/10',  border: 'border-slate-500/30',  label: '安全' };
+    const severityColor = (s: string) =>
+      s === 'critical' ? 'text-red-400 bg-red-500/15 border-red-500/30' :
+      s === 'high'     ? 'text-orange-400 bg-orange-500/15 border-orange-500/30' :
+      s === 'medium'   ? 'text-amber-400 bg-amber-500/15 border-amber-500/30' :
+                         'text-slate-400 bg-slate-500/15 border-slate-500/30';
+    const severityLabel = (s: string) =>
+      s === 'critical' ? '致命的' : s === 'high' ? '高' : s === 'medium' ? '中' : '低';
+
+    return (
+      <div className="p-3 flex flex-col gap-3 text-xs">
+        {/* Back button */}
+        <button
+          onClick={() => onSelectNode(null)}
+          className="flex items-center gap-1.5 text-slate-500 hover:text-slate-300 transition-colors -ml-0.5"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+          </svg>
+          プロジェクト概要に戻る
+        </button>
+
+        {/* File header */}
+        <div className={`rounded-lg p-3 border ${riskColor.bg} ${riskColor.border}`}>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${riskColor.text} ${riskColor.border} bg-black/20`}>
+              {riskColor.label}
+            </span>
+            <span className="text-[10px] text-slate-500">{selectedNode.language}</span>
+            <span className="text-[10px] text-slate-600 ml-auto">{selectedNode.lines.toLocaleString()}行</span>
+          </div>
+          <p className={`text-sm font-bold ${riskColor.text} truncate`}>{selectedNode.name}</p>
+          <p className="text-[10px] text-slate-600 truncate mt-0.5">{selectedNode.path}</p>
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-[#0d0d18] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${rl === 'critical' ? 'bg-red-500' : rl === 'risk' ? 'bg-orange-500' : rl === 'caution' ? 'bg-amber-500' : 'bg-slate-600'}`}
+                style={{ width: `${selectedNode.riskScore}%` }}
+              />
+            </div>
+            <span className={`text-[10px] font-mono ${riskColor.text}`}>{selectedNode.riskScore}点</span>
+          </div>
+        </div>
+
+        {/* Risk factors */}
+        {selectedNode.riskFactors.length > 0 ? (
+          <div>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5">
+              ⚠ 危険な理由（{selectedNode.riskFactors.length}件）
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {selectedNode.riskFactors.map((rf, i) => (
+                <div key={i} className={`rounded-lg p-2.5 border ${severityColor(rf.severity).split(' ').slice(1).join(' ')}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${severityColor(rf.severity)}`}>
+                      {severityLabel(rf.severity)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">{rf.type}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">{rf.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-600">リスク要因の詳細なし</p>
+        )}
+
+        {/* EOL packages */}
+        {selectedNode.eolPackages.length > 0 && (
+          <div>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5">
+              💀 EOL依存パッケージ
+            </p>
+            {selectedNode.eolPackages.map((pkg, i) => (
+              <div key={i} className="rounded p-2 bg-red-500/8 border border-red-500/20 mb-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-mono text-red-400 font-bold">{pkg.name}</span>
+                  <span className="text-[9px] text-red-600 ml-auto">EOL: {pkg.eol}</span>
+                </div>
+                {pkg.note && <p className="text-[10px] text-slate-500 mt-0.5">{pkg.note}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Deps info */}
+        {(selectedNode.deps.length > 0 || selectedNode.dependents.length > 0) && (
+          <div className="rounded p-2.5 bg-[#0f0f1a] border border-[#1e293b]">
+            <p className="text-[10px] text-slate-500 mb-1.5">依存関係</p>
+            <div className="flex gap-3">
+              <div>
+                <p className="text-[10px] text-slate-600">参照先</p>
+                <p className="text-sm font-bold text-indigo-400">{selectedNode.deps.length}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-600">参照元</p>
+                <p className="text-sm font-bold text-indigo-400">{selectedNode.dependents.length}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-3 flex flex-col gap-3 text-xs">

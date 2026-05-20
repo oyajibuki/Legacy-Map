@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Upload, ChevronRight } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import {
-  DEMOS, CATEGORIES, CATEGORY_ICONS,
+  CATEGORIES, CATEGORY_ICONS,
   getDemosByCategory, DemoCategory, DemoProject,
 } from '@/lib/demo-list';
 import { ARCH_STYLES } from '@/lib/known-projects';
@@ -18,7 +18,6 @@ interface Props {
 export default function DemoSidebar({ selectedId, onSelect, onUploadClick, isLoading }: Props) {
   const [category, setCategory] = useState<DemoCategory>('すべて');
   const filtered = getDemosByCategory(category);
-  const selected = DEMOS.find(d => d.id === selectedId) ?? null;
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0f] border-r border-[#1e293b] overflow-hidden">
@@ -121,24 +120,6 @@ export default function DemoSidebar({ selectedId, onSelect, onUploadClick, isLoa
           })}
         </div>
       </div>
-
-      {/* ── Selected demo description ─────────────────── */}
-      {selected && (
-        <div
-          className="flex-shrink-0 mx-3 mb-2 rounded-lg p-3 border text-xs"
-          style={{
-            background: ARCH_STYLES[selected.archType].bg,
-            borderColor: ARCH_STYLES[selected.archType].border,
-          }}
-        >
-          <p className="font-semibold text-slate-200 mb-1 leading-snug">
-            「{selected.tagline}」
-          </p>
-          <p className="text-slate-400 leading-relaxed text-[11px]">
-            {selected.description}
-          </p>
-        </div>
-      )}
 
       {/* ── Upload own code ───────────────────────────── */}
       <div className="flex-shrink-0 px-3 pb-4 border-t border-[#1e293b] pt-3">
