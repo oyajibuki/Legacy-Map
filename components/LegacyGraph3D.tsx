@@ -645,7 +645,7 @@ export default function LegacyGraph3D({ graph, selectedNode, onSelectNode }: Pro
         cooldownTicks={200}
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.3}
-        cameraPosition={CAMERA_INITIAL}
+        {...{ cameraPosition: CAMERA_INITIAL } as object}
       />
     </div>
   );

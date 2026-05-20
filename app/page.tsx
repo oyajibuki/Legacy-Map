@@ -8,7 +8,7 @@ import ReportPanel from '@/components/ReportPanel';
 import DemoSidebar from '@/components/DemoSidebar';
 import ProjectInsightCard from '@/components/ProjectInsightCard';
 import { DependencyGraph, FileNode, UploadedFile } from '@/lib/types';
-import { detectKnownProject, ProjectInsight } from '@/lib/known-projects';
+import { detectKnownProject, ProjectInsight, KNOWN_PROJECTS, ARCH_STYLES } from '@/lib/known-projects';
 import { DemoProject, DEMOS } from '@/lib/demo-list';
 import {
   AlertTriangle, Shield, TrendingUp, Files,
@@ -48,7 +48,11 @@ export default function Home() {
       const data: DependencyGraph = await res.json();
       setGraph(data);
       setMode('demo');
-      setInsight(detectKnownProject(data.nodes.map(n => n.path)));
+      // Use direct ID mapping first — avoids mis-detection (e.g. ChocolateDoom → DOOM)
+      const directInsight = demo.knownProjectId
+        ? (KNOWN_PROJECTS.find(p => p.id === demo.knownProjectId) ?? null)
+        : null;
+      setInsight(directInsight ?? detectKnownProject(data.nodes.map(n => n.path)));
     } catch (err) {
       setError(`デモ読み込みエラー: ${err}`);
     } finally {
@@ -126,15 +130,16 @@ export default function Home() {
         {/* 3D graph */}
         <div className="flex-1 min-w-0 relative">
           <LegacyGraph3D graph={graph} selectedNode={selectedNode} onSelectNode={setSelectedNode} />
-          {insight && (
+          {/* Insight card: only show as floating popup in viewing mode */}
+          {mode === 'viewing' && insight && (
             <ProjectInsightCard insight={insight} onDismiss={() => setInsight(null)} />
           )}
         </div>
 
         {/* Overview panel — shown in demo mode on the right side */}
         {mode === 'demo' && (
-          <div className="w-60 flex-shrink-0 border-l border-[#1e293b] bg-[#0d0d14] flex flex-col overflow-y-auto">
-            <DemoOverview graph={graph} onSelectNode={setSelectedNode} />
+          <div className="w-64 flex-shrink-0 border-l border-[#1e293b] bg-[#0d0d14] flex flex-col overflow-y-auto">
+            <DemoOverview graph={graph} insight={insight} onSelectNode={setSelectedNode} />
           </div>
         )}
 
@@ -261,13 +266,73 @@ function StatChip({ icon, value, label, color }: { icon: React.ReactNode; value:
 }
 
 // ── Demo Overview (right panel in demo mode) ──────────────────
-function DemoOverview({ graph, onSelectNode }: { graph: DependencyGraph; onSelectNode: (n: FileNode|null) => void }) {
-  const topRisk = [...graph.nodes].filter(n => n.riskLevel !== 'safe').sort((a,b)=>b.riskScore-a.riskScore).slice(0,6);
-  const topHubs = [...graph.nodes].filter(n=>n.dependents.length>0).sort((a,b)=>b.dependents.length-a.dependents.length).slice(0,5);
+function DemoOverview({
+  graph,
+  insight,
+  onSelectNode,
+}: {
+  graph: DependencyGraph;
+  insight: ProjectInsight | null;
+  onSelectNode: (n: FileNode | null) => void;
+}) {
+  const [showFunFact, setShowFunFact] = useState(false);
+  const topRisk = [...graph.nodes].filter(n => n.riskLevel !== 'safe').sort((a,b)=>b.riskScore-a.riskScore).slice(0,5);
+  const topHubs = [...graph.nodes].filter(n=>n.dependents.length>0).sort((a,b)=>b.dependents.length-a.dependents.length).slice(0,4);
+  const style = insight ? ARCH_STYLES[insight.archType] : null;
 
   return (
     <div className="p-3 flex flex-col gap-3 text-xs">
-      <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">プロジェクト概要</p>
+
+      {/* ── Project Insight (top section) ── */}
+      {insight && style ? (
+        <div
+          className="rounded-lg p-3 border"
+          style={{ background: style.bg, borderColor: style.border }}
+        >
+          {/* Badge + tags */}
+          <div className="flex flex-wrap gap-1 mb-2">
+            <span
+              className="text-[9px] px-1.5 py-0.5 rounded-full border font-bold"
+              style={{ color: style.color, borderColor: style.border, background: 'rgba(0,0,0,0.3)' }}
+            >
+              {style.badge}
+            </span>
+            {insight.tags.slice(0, 3).map(tag => (
+              <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0d0d18]/60 border border-[#2d2d3e] text-slate-500">
+                {tag}
+              </span>
+            ))}
+          </div>
+
+          {/* Headline */}
+          <p className="text-xs font-bold leading-snug mb-2" style={{ color: style.color }}>
+            「{insight.headline}」
+          </p>
+
+          {/* Insight text */}
+          <p className="text-[11px] text-slate-300 leading-relaxed mb-2">
+            {insight.insight}
+          </p>
+
+          {/* Fun fact toggle */}
+          <button
+            onClick={() => setShowFunFact(v => !v)}
+            className="text-[10px] px-2 py-1 rounded border transition-colors w-full text-left"
+            style={{ color: style.color, borderColor: style.border, background: 'rgba(0,0,0,0.2)' }}
+          >
+            💡 {showFunFact ? '▾' : '▸'} FUN FACT
+          </button>
+          {showFunFact && (
+            <p className="text-[11px] text-slate-400 leading-relaxed mt-2 pl-1 border-l-2" style={{ borderColor: style.border }}>
+              {insight.funFact}
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="text-[10px] text-slate-600 font-medium uppercase tracking-wider">プロジェクト概要</p>
+      )}
+
+      {/* ── Stats grid ── */}
       <div className="grid grid-cols-2 gap-1.5">
         {[
           {label:'ファイル', value:graph.stats.totalFiles},
@@ -282,7 +347,7 @@ function DemoOverview({ graph, onSelectNode }: { graph: DependencyGraph; onSelec
         ))}
       </div>
 
-      {/* Risk distribution */}
+      {/* ── Risk distribution ── */}
       <div>
         <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5">リスク分布</p>
         {[
@@ -302,7 +367,7 @@ function DemoOverview({ graph, onSelectNode }: { graph: DependencyGraph; onSelec
         ))}
       </div>
 
-      {/* Top risky */}
+      {/* ── Top risky ── */}
       {topRisk.length > 0 && (
         <div>
           <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5">要対応 TOP</p>
@@ -318,7 +383,7 @@ function DemoOverview({ graph, onSelectNode }: { graph: DependencyGraph; onSelec
         </div>
       )}
 
-      {/* Hub files */}
+      {/* ── Hub files ── */}
       {topHubs.length > 0 && (
         <div>
           <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5">ハブファイル</p>
@@ -332,7 +397,7 @@ function DemoOverview({ graph, onSelectNode }: { graph: DependencyGraph; onSelec
         </div>
       )}
 
-      {/* Languages */}
+      {/* ── Languages ── */}
       {graph.stats.languages.length > 0 && (
         <div>
           <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5">検出言語</p>
@@ -346,7 +411,7 @@ function DemoOverview({ graph, onSelectNode }: { graph: DependencyGraph; onSelec
 
       <p className="text-[10px] text-slate-600 leading-relaxed mt-auto pt-2 border-t border-[#1e293b]">
         ノードをクリックでファイル詳細。<br/>
-        下部「AI分析」でレポート生成。
+        下部「AI分析」でGemini APIにより詳細レポートも生成可。
       </p>
     </div>
   );

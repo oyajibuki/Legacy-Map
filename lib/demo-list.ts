@@ -19,6 +19,7 @@ export interface DemoProject {
   tagline: string;     // one-line hook shown in timeline
   description: string; // shown in sidebar when selected
   color: string;       // accent color
+  knownProjectId?: string; // ID in KNOWN_PROJECTS — skips pattern detection when set
 }
 
 export const CATEGORIES: DemoCategory[] = [
@@ -75,6 +76,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '37年間、誰も全体を把握していない',
     description: '1987年から何十人もが少しずつ書き続けた。変数名は1文字、グローバル変数が至る所に。でも37年間動き続けている「動けばいい」精神の到達点。',
     color: '#f97316',
+    knownProjectId: 'nethack',
   },
   {
     id: '1992_Wolf3D',
@@ -87,6 +89,7 @@ export const DEMOS: DemoProject[] = [
     tagline: 'DOOMを生んだ26ファイルの原点',
     description: 'レイキャスティングという「なんちゃって3D」で世界を驚かせた。翌年Carmackはこれを捨ててDOOMを作る。天才の自己否定。',
     color: '#f472b6',
+    knownProjectId: 'wolf3d',
   },
   {
     id: '1993_ChocolateDoom',
@@ -99,6 +102,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '天才コードを現代人が3倍のファイルで解読した',
     description: '元DOOMを忠実に現代OSへ移植。155ファイルが500ファイルに膨らんだのはプラットフォーム抽象化という「現代の重力」の証明。',
     color: '#818cf8',
+    knownProjectId: 'chocolate-doom',
   },
   {
     id: '1993_DOOM',
@@ -111,6 +115,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '155ファイルで地獄を作った天才',
     description: 'MS-DOS専用として設計。マルチプラットフォーム対応ゼロ。全コードがゲームのためだけに存在する「制約の美」。接続密度3.4本/ファイルはcURLの5倍。',
     color: '#f472b6',
+    knownProjectId: 'doom',
   },
   {
     id: '1993_Ruby_v049',
@@ -123,6 +128,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '日本発・世界標準言語の最初の形',
     description: '100ファイル以下でオブジェクト指向スクリプト言語を実現。eval.cという心臓部1本に全インタープリタが凝縮。DOOMと同じ「神ハブ」構造。',
     color: '#f472b6',
+    knownProjectId: 'ruby-early',
   },
   {
     id: '1996_Quake',
@@ -135,6 +141,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '世界初の真3Dエンジン、DOOMから3年',
     description: 'BSPツリー・ポータルレンダリング・GL対応。DOOMの密な一枚岩からレンダラー分離が始まった。後にHalf-Life・CS・CoD系譜の祖先となるコード。',
     color: '#f472b6',
+    knownProjectId: 'quake',
   },
   {
     id: '1996_Ruby_v100',
@@ -147,6 +154,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '1996年12月25日、クリスマスに生まれた',
     description: 'Ruby 1.0はMatzが意図的にクリスマスを選んでリリース。日本発で世界標準になった唯一のプログラミング言語の正式版。',
     color: '#f472b6',
+    knownProjectId: 'ruby-early',
   },
   {
     id: '1996_ZDoom',
@@ -159,6 +167,7 @@ export const DEMOS: DemoProject[] = [
     tagline: 'DOOMをC++で書き直したらこうなった',
     description: 'DOOMエンジンにC++クラスを導入した最初の大型ポート。600ファイルに膨張。「C++は整理するか、爆発するか」を示す実例。',
     color: '#818cf8',
+    knownProjectId: 'zdoom',
   },
   {
     id: '1997_Quake2',
@@ -171,6 +180,7 @@ export const DEMOS: DemoProject[] = [
     tagline: 'サーバー/クライアント分離、設計思想の転換点',
     description: 'game.dllとエンジンを分離しModコミュニティを解放。DOOMの一枚岩から脱却が本格化。後に100本以上のゲームに使われる。',
     color: '#818cf8',
+    knownProjectId: 'quake2',
   },
   {
     id: '1999_Quake3',
@@ -183,6 +193,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '6年でDOOMから完全に別の生き物へ',
     description: 'シェーダーシステム導入でアーティストがコードなしに表現できる時代へ。vm/（仮想マシン）でゲームロジックをサンドボックス化。2005年にGPLで公開。',
     color: '#818cf8',
+    knownProjectId: 'quake3',
   },
   {
     id: '2004_WordPress',
@@ -195,6 +206,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '世界の43%のサイトを動かすPHPスパゲッティ',
     description: 'グローバル変数とフック地獄。「WordPressのコードは最悪だ」という批評は20年続いている。でも世界の43%のWebサイトはこれで動いている。',
     color: '#f97316',
+    knownProjectId: 'wordpress',
   },
   {
     id: '2009_Redis',
@@ -207,6 +219,7 @@ export const DEMOS: DemoProject[] = [
     tagline: 'イタリア人1人が書いた「世界で最も美しいCコード」',
     description: 'src/以下に全機能が凝縮。10万行以下で世界のインフラを支える。変数名が意味を持ち、関数が短く、コメントが哲学的。',
     color: '#34d399',
+    knownProjectId: 'redis',
   },
   {
     id: '2013_React',
@@ -219,6 +232,7 @@ export const DEMOS: DemoProject[] = [
     tagline: 'UIをコンポーネントに分解した革命',
     description: '2013年の最初期バージョン。発表時「なぜHTMLをJSに書くんだ？」と猛批判。10年後、それが世界標準になった。',
     color: '#fbbf24',
+    knownProjectId: 'react',
   },
   {
     id: '2014_Vue',
@@ -231,6 +245,7 @@ export const DEMOS: DemoProject[] = [
     tagline: 'Googleを辞めた1人がReactに並んだ',
     description: 'Reactを参考にAngularの良い部分を混ぜ、1人で設計。企業バックなし・1人・でもReactと並ぶシェアへ。個人OSSが企業フレームワークと戦えることを証明。',
     color: '#34d399',
+    knownProjectId: 'vue',
   },
   {
     id: '2019_Svelte',
@@ -243,6 +258,7 @@ export const DEMOS: DemoProject[] = [
     tagline: 'ランタイムを捨てたフレームワーク',
     description: '「フレームワークはコンパイル時に消えるべき」という思想。仮想DOMを持たない。コードは少なく、速く、美しい。',
     color: '#fbbf24',
+    knownProjectId: 'svelte',
   },
   {
     id: '2024_cURL',
@@ -255,6 +271,7 @@ export const DEMOS: DemoProject[] = [
     tagline: '27年間1人が作り続ける、世界で最も使われるC',
     description: '1997年から27年。250以上のプロトコル対応。世界のほぼ全てのサーバーとスマートフォンでこのコードが動いている。',
     color: '#34d399',
+    knownProjectId: 'curl',
   },
 ];
 

@@ -256,8 +256,8 @@ export default function LegacyGraph({ graph, selectedNode, onSelectNode }: Props
     }
 
     ctx.beginPath();
-    ctx.moveTo(l.source.x, l.source.y);
-    ctx.lineTo(l.target.x, l.target.y);
+    ctx.moveTo(l.source.x ?? 0, l.source.y ?? 0);
+    ctx.lineTo(l.target.x ?? 0, l.target.y ?? 0);
     ctx.strokeStyle = color;
     ctx.lineWidth = Math.min(4, Math.max(0.5, l.weight * 0.8));
     ctx.stroke();
