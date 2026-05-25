@@ -12,7 +12,7 @@ import { detectKnownProject, ProjectInsight, KNOWN_PROJECTS, ARCH_STYLES } from 
 import { DemoProject, DEMOS } from '@/lib/demo-list';
 import {
   AlertTriangle, Shield, TrendingUp, Files,
-  ChevronRight, GitBranch, RefreshCw, ArrowLeft,
+  ChevronRight, GitBranch, RefreshCw, ArrowLeft, ChevronUp,
 } from 'lucide-react';
 
 const LegacyGraph3D = dynamic(() => import('@/components/LegacyGraph3D'), { ssr: false });
@@ -35,6 +35,9 @@ export default function Home() {
   const [insight, setInsight]     = useState<ProjectInsight | null>(null);
   const [leftTab, setLeftTab]     = useState<'overview' | 'structure'>('overview');
   const [showUploadInSidebar, setShowUploadInSidebar] = useState(false);
+  const [isMobile, setIsMobile]               = useState(false);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [mobileSheetTab, setMobileSheetTab]   = useState<'list' | 'overview' | 'node'>('list');
 
   // ── Load demo JSON ──────────────────────────────────────────
   const loadDemo = useCallback(async (demo: DemoProject) => {
@@ -65,6 +68,22 @@ export default function Home() {
     const first = DEMOS.find(d => d.id === '1993_DOOM') ?? DEMOS[0];
     loadDemo(first);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mobile detection
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // Auto-switch to node tab when node selected on mobile
+  useEffect(() => {
+    if (isMobile && selectedNode) {
+      setMobileSheetTab('node');
+      setMobileSheetOpen(true);
+    }
+  }, [selectedNode, isMobile]);
 
   // ── Analyze uploaded code ───────────────────────────────────
   async function handleFilesReady(files: UploadedFile[]) {
@@ -185,71 +204,287 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen grid-bg overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center px-4 py-2 border-b border-[#1e293b] bg-[#0a0a0f]/80 backdrop-blur-sm z-20 flex-shrink-0 gap-3">
-        <div className="text-xs text-slate-500 flex items-center gap-2">
-          <span className="text-slate-300 font-semibold">LegacyMap</span>
-          <span>·</span>
-          <span>伝説のコードを3Dで読む</span>
-        </div>
-        <div className="flex-1"/>
-        {mode === 'upload' && (
-          <button onClick={() => { setMode('demo'); setShowUploadInSidebar(false); }}
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-[#2d2d3e] text-slate-400 hover:text-slate-200 transition-colors">
-            <ArrowLeft className="w-3 h-3"/> デモに戻る
-          </button>
-        )}
-      </header>
-
-      <div className="flex-1 flex min-h-0">
-        {/* ── LEFT SIDEBAR ─────────────────────────────── */}
-        <div className="w-64 flex-shrink-0">
-          {mode === 'upload' ? (
-            /* Upload mode: show file scanner in sidebar */
-            <div className="flex flex-col h-full bg-[#0a0a0f] border-r border-[#1e293b] overflow-hidden">
-              {/* Back button */}
-              <button
-                onClick={() => { setMode('demo'); setError(''); }}
-                className="flex items-center gap-1.5 px-4 py-2.5 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#0f0f1a] border-b border-[#1e293b] transition-colors text-left w-full flex-shrink-0"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                ホームに戻る
+      {isMobile ? (
+        /* ── MOBILE LAYOUT ──────────────────────────────────── */
+        <>
+          {/* Minimal header */}
+          <header className="flex items-center px-4 py-2.5 border-b border-[#1e293b] bg-[#0a0a0f]/90 backdrop-blur-sm z-20 flex-shrink-0">
+            <span className="text-sm font-semibold text-slate-200">LegacyMap</span>
+            <span className="mx-2 text-slate-700">·</span>
+            <span className="text-xs text-slate-500 truncate">伝説のコードを3Dで読む</span>
+            <div className="flex-1"/>
+            {(mode === 'viewing' || mode === 'upload') && (
+              <button onClick={backToDemo} className="flex items-center gap-1 text-xs px-2 py-1 text-slate-400 hover:text-slate-200 transition-colors">
+                <ArrowLeft className="w-3.5 h-3.5"/>
               </button>
-              <div className="px-4 pt-3 pb-3 border-b border-[#1e293b] flex-shrink-0">
-                <p className="text-sm font-semibold text-slate-200 mb-0.5">自分のコードを解析</p>
-                <p className="text-[11px] text-slate-500">フォルダをドロップするかクリックして選択</p>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                {error && (
-                  <div className="mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">{error}</div>
-                )}
-                <FileScanner onFilesReady={handleFilesReady} isAnalyzing={isAnalyzing}/>
-              </div>
-            </div>
-          ) : (
-            /* Demo mode: show demo timeline */
-            <DemoSidebar
-              selectedId={demoId}
-              onSelect={loadDemo}
-              onUploadClick={() => setMode('upload')}
-              isLoading={isDemoLoading}
-            />
-          )}
-        </div>
+            )}
+          </header>
 
-        {/* ── MAIN AREA ────────────────────────────────── */}
-        {mode === 'upload' && !graph ? (
-          <div className="flex-1 flex items-center justify-center bg-[#02020a]">
-            <div className="text-center text-slate-600">
-              <p className="text-4xl mb-3">🗺️</p>
-              <p className="text-sm">左のパネルからファイルをアップロードしてください</p>
-              <p className="text-xs mt-1">解析後、3Dグラフが表示されます</p>
-            </div>
+          {/* Full-screen 3D graph */}
+          <div className="flex-1 relative overflow-hidden min-h-0">
+            {graph ? (
+              <LegacyGraph3D
+                graph={graph}
+                selectedNode={selectedNode}
+                onSelectNode={(n) => {
+                  setSelectedNode(n);
+                  if (n) { setMobileSheetTab('node'); setMobileSheetOpen(true); }
+                }}
+              />
+            ) : isDemoLoading || isAnalyzing ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <div className="w-8 h-8 border-2 border-indigo-500/40 border-t-indigo-400 rounded-full animate-spin"/>
+                <p className="text-sm text-slate-500">{isAnalyzing ? '解析中...' : 'デモを読み込み中...'}</p>
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center h-full px-8">
+                <p className="text-red-400 text-sm text-center">{error}</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-600">
+                <p className="text-3xl">🗺️</p>
+                <p className="text-sm">下のボタンからデモを選択してください</p>
+              </div>
+            )}
           </div>
-        ) : (
-          graphArea
-        )}
-      </div>
+
+          {/* Bottom handle bar — always visible, opens/closes the sheet */}
+          <button
+            type="button"
+            className="flex-shrink-0 w-full bg-[#0d0d14]/95 backdrop-blur border-t border-[#1e293b] z-30 flex items-center px-4 py-3 gap-3 active:bg-[#1a1a28] transition-colors"
+            onClick={() => {
+              if (!mobileSheetOpen) {
+                if (mode === 'demo' || mode === 'upload') setMobileSheetTab('list');
+                else if (graph) setMobileSheetTab('overview');
+              }
+              setMobileSheetOpen(v => !v);
+            }}
+          >
+            <div className="flex items-center gap-3 flex-1 text-xs min-w-0">
+              {graph ? (
+                <>
+                  <span className="flex items-center gap-1 text-slate-400 flex-shrink-0">
+                    <Files className="w-3 h-3"/>{graph.stats.totalFiles}
+                  </span>
+                  {(graph.stats.criticalFiles + graph.stats.riskFiles) > 0 && (
+                    <span className="flex items-center gap-1 text-red-400 flex-shrink-0">
+                      <AlertTriangle className="w-3 h-3"/>
+                      {graph.stats.criticalFiles + graph.stats.riskFiles}件要対応
+                    </span>
+                  )}
+                  <span className="text-slate-600 truncate">
+                    {mode === 'demo'
+                      ? (DEMOS.find(d => d.id === demoId)?.name ?? 'デモ')
+                      : '自分のコード'}
+                  </span>
+                </>
+              ) : (
+                <span className="text-slate-500">
+                  {mode === 'upload' ? 'コードをアップロード' : 'デモを選択してください'}
+                </span>
+              )}
+            </div>
+            <ChevronUp className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 text-indigo-400 ${mobileSheetOpen ? 'rotate-180' : ''}`}/>
+          </button>
+
+          {/* Mobile bottom sheet */}
+          {mobileSheetOpen && (
+            <div className="fixed inset-0 z-50 flex flex-col justify-end">
+              {/* Backdrop */}
+              <div
+                className="absolute inset-0 bg-black/60"
+                onClick={() => setMobileSheetOpen(false)}
+              />
+              {/* Sheet panel */}
+              <div
+                className="relative bg-[#0d0d14] border-t border-[#1e293b] rounded-t-2xl flex flex-col"
+                style={{ maxHeight: '74vh' }}
+              >
+                {/* Drag handle */}
+                <div
+                  className="flex justify-center pt-2.5 pb-1 flex-shrink-0 cursor-pointer"
+                  onClick={() => setMobileSheetOpen(false)}
+                >
+                  <div className="w-10 h-1 bg-[#2d2d3e] rounded-full"/>
+                </div>
+
+                {/* Tab bar */}
+                <div className="flex border-b border-[#1e293b] flex-shrink-0 overflow-x-auto">
+                  {(mode === 'demo' || mode === 'upload') && (
+                    <button
+                      onClick={() => setMobileSheetTab('list')}
+                      className={`flex-shrink-0 px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                        mobileSheetTab === 'list'
+                          ? 'text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/5'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {mode === 'upload' ? 'アップロード' : 'デモ一覧'}
+                    </button>
+                  )}
+                  {graph && (
+                    <button
+                      onClick={() => setMobileSheetTab('overview')}
+                      className={`flex-shrink-0 px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                        mobileSheetTab === 'overview'
+                          ? 'text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/5'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      概要
+                    </button>
+                  )}
+                  {selectedNode && (
+                    <button
+                      onClick={() => setMobileSheetTab('node')}
+                      className={`flex-shrink-0 px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                        mobileSheetTab === 'node'
+                          ? 'text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/5'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      <span className="block truncate max-w-[140px]">{selectedNode.name}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Tab content */}
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  {/* デモ一覧 */}
+                  {mobileSheetTab === 'list' && mode === 'demo' && (
+                    <DemoSidebar
+                      selectedId={demoId}
+                      onSelect={(d) => { loadDemo(d); setMobileSheetOpen(false); }}
+                      onUploadClick={() => { setMode('upload'); setMobileSheetTab('list'); }}
+                      isLoading={isDemoLoading}
+                    />
+                  )}
+                  {/* アップロード */}
+                  {mobileSheetTab === 'list' && mode === 'upload' && (
+                    <div className="p-4">
+                      <button
+                        onClick={() => { setMode('demo'); setError(''); }}
+                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 mb-4 transition-colors"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5"/> デモに戻る
+                      </button>
+                      <p className="text-sm font-semibold text-slate-200 mb-1">自分のコードを解析</p>
+                      <p className="text-xs text-slate-500 mb-4">フォルダをドロップするかクリックして選択</p>
+                      {error && (
+                        <div className="mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">{error}</div>
+                      )}
+                      <FileScanner
+                        onFilesReady={(files) => { handleFilesReady(files); setMobileSheetOpen(false); setMobileSheetTab('overview'); }}
+                        isAnalyzing={isAnalyzing}
+                      />
+                    </div>
+                  )}
+                  {/* 概要 */}
+                  {mobileSheetTab === 'overview' && graph && (
+                    <DemoOverview
+                      graph={graph}
+                      insight={insight}
+                      selectedNode={null}
+                      onSelectNode={(n) => {
+                        setSelectedNode(n);
+                        if (n) setMobileSheetTab('node');
+                      }}
+                    />
+                  )}
+                  {/* ノード詳細 (demo mode) */}
+                  {mobileSheetTab === 'node' && selectedNode && mode !== 'viewing' && graph && (
+                    <DemoOverview
+                      graph={graph}
+                      insight={insight}
+                      selectedNode={selectedNode}
+                      onSelectNode={(n) => {
+                        setSelectedNode(n);
+                        setMobileSheetTab(n ? 'node' : 'overview');
+                      }}
+                    />
+                  )}
+                  {/* ノード詳細 (viewing mode) */}
+                  {mobileSheetTab === 'node' && selectedNode && mode === 'viewing' && (
+                    <NodeDetail
+                      node={selectedNode}
+                      onClose={() => { setSelectedNode(null); setMobileSheetTab('overview'); }}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        /* ── DESKTOP LAYOUT ─────────────────────────────────── */
+        <>
+          {/* Header */}
+          <header className="flex items-center px-4 py-2 border-b border-[#1e293b] bg-[#0a0a0f]/80 backdrop-blur-sm z-20 flex-shrink-0 gap-3">
+            <div className="text-xs text-slate-500 flex items-center gap-2">
+              <span className="text-slate-300 font-semibold">LegacyMap</span>
+              <span>·</span>
+              <span>伝説のコードを3Dで読む</span>
+            </div>
+            <div className="flex-1"/>
+            {mode === 'upload' && (
+              <button onClick={() => { setMode('demo'); setShowUploadInSidebar(false); }}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-[#2d2d3e] text-slate-400 hover:text-slate-200 transition-colors">
+                <ArrowLeft className="w-3 h-3"/> デモに戻る
+              </button>
+            )}
+          </header>
+
+          <div className="flex-1 flex min-h-0">
+            {/* ── LEFT SIDEBAR ─────────────────────────────── */}
+            <div className="w-64 flex-shrink-0">
+              {mode === 'upload' ? (
+                /* Upload mode: show file scanner in sidebar */
+                <div className="flex flex-col h-full bg-[#0a0a0f] border-r border-[#1e293b] overflow-hidden">
+                  {/* Back button */}
+                  <button
+                    onClick={() => { setMode('demo'); setError(''); }}
+                    className="flex items-center gap-1.5 px-4 py-2.5 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#0f0f1a] border-b border-[#1e293b] transition-colors text-left w-full flex-shrink-0"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    ホームに戻る
+                  </button>
+                  <div className="px-4 pt-3 pb-3 border-b border-[#1e293b] flex-shrink-0">
+                    <p className="text-sm font-semibold text-slate-200 mb-0.5">自分のコードを解析</p>
+                    <p className="text-[11px] text-slate-500">フォルダをドロップするかクリックして選択</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {error && (
+                      <div className="mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">{error}</div>
+                    )}
+                    <FileScanner onFilesReady={handleFilesReady} isAnalyzing={isAnalyzing}/>
+                  </div>
+                </div>
+              ) : (
+                /* Demo mode: show demo timeline */
+                <DemoSidebar
+                  selectedId={demoId}
+                  onSelect={loadDemo}
+                  onUploadClick={() => setMode('upload')}
+                  isLoading={isDemoLoading}
+                />
+              )}
+            </div>
+
+            {/* ── MAIN AREA ────────────────────────────────── */}
+            {mode === 'upload' && !graph ? (
+              <div className="flex-1 flex items-center justify-center bg-[#02020a]">
+                <div className="text-center text-slate-600">
+                  <p className="text-4xl mb-3">🗺️</p>
+                  <p className="text-sm">左のパネルからファイルをアップロードしてください</p>
+                  <p className="text-xs mt-1">解析後、3Dグラフが表示されます</p>
+                </div>
+              </div>
+            ) : (
+              graphArea
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
